@@ -1,7 +1,6 @@
-#ifndef _PREDICTOR_H_
-#define _PREDICTOR_H_
+#pragma once
 
-#include <stdlib.h>
+#include <cstdlib>
 
 struct SampleHist
 {
@@ -79,5 +78,5 @@ class SampleCondPredictor
 // Predictor End
 // =================
 
-#endif
-static SampleCondPredictor cond_predictor_impl;
+#include "intel_cbp.h"
+static IntelSkylakePredictor cond_predictor_impl;

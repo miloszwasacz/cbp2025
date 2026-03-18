@@ -54,7 +54,7 @@ void notify_instr_fetch(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint6
 bool get_cond_dir_prediction(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint64_t pred_cycle)
 {
     const bool tage_sc_l_pred =  cbp2016_tage_sc_l.predict(seq_no, piece, pc);
-    const bool my_prediction = cond_predictor_impl.predict(seq_no, piece, pc, tage_sc_l_pred);
+    const bool my_prediction = cond_predictor_impl.predict(seq_no, piece, pc);
     return my_prediction;
 }
 
