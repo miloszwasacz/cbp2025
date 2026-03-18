@@ -17,7 +17,6 @@
 // This file provides a sample predictor integration based on the interface provided.
 
 #include "lib/sim_common_structs.h"
-#include "cbp2016_tage_sc_l.h"
 #include "my_cond_branch_predictor.h"
 #include <cassert>
 
@@ -29,14 +28,12 @@
 //
 void beginCondDirPredictor()
 {
-    // setup sample_predictor
-    cbp2016_tage_sc_l.setup();
     cond_predictor_impl.setup();
 }
 
 //
 // notify_instr_fetch(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint64_t fetch_cycle)
-// 
+//
 // This function is called when any instructions(not just branches) gets fetched.
 // Along with the unique identifying ids(seq_no, piece), PC of the instruction and fetch_cycle are also provided as inputs
 //
@@ -46,25 +43,23 @@ void notify_instr_fetch(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint6
 
 //
 // get_cond_dir_prediction(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint64_t pred_cycle)
-// 
+//
 // This function is called by the simulator for predicting conditional branches.
 // input values are unique identifying ids(seq_no, piece) and PC of the branch.
-// return value is the predicted direction. 
+// return value is the predicted direction.
 //
 bool get_cond_dir_prediction(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint64_t pred_cycle)
 {
-    const bool tage_sc_l_pred =  cbp2016_tage_sc_l.predict(seq_no, piece, pc);
-    const bool my_prediction = cond_predictor_impl.predict(seq_no, piece, pc);
-    return my_prediction;
+    return cond_predictor_impl.predict(seq_no, piece, pc);
 }
 
 //
 // spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_class, const bool resolve_dir, const bool pred_dir, const uint64_t next_pc)
-// 
+//
 // This function is called by the simulator for updating the history vectors and any state that needs to be updated speculatively.
 // The function is called for all the branches (not just conditional branches). To faciliate accurate history updates, spec_update is called right
 // after a prediction is made.
-// input values are unique identifying ids(seq_no, piece), PC of the instruction, instruction class, predicted/resolve direction and the next_pc 
+// input values are unique identifying ids(seq_no, piece), PC of the instruction, instruction class, predicted/resolve direction and the next_pc
 //
 void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_class, const bool resolve_dir, const bool pred_dir, const uint64_t next_pc)
 {
@@ -76,7 +71,7 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
             br_type = 1;
             break;
         case InstClass::uncondDirectBranchInstClass:
-            br_type = 0; 
+            br_type = 0;
             break;
         case InstClass::uncondIndirectBranchInstClass:
             br_type = 2;
@@ -85,7 +80,7 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
             br_type = 0;
             break;
         case InstClass::callIndirectInstClass:
-            br_type = 2; 
+            br_type = 2;
             break;
         case InstClass::ReturnInstClass:
             br_type = 2;
@@ -96,19 +91,20 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
 
     if(inst_class == InstClass::condBranchInstClass)
     {
-        cbp2016_tage_sc_l.history_update(seq_no, piece, pc, br_type, pred_dir, resolve_dir, next_pc);
         cond_predictor_impl.history_update(seq_no, piece, pc, resolve_dir, next_pc);
+        // cond_predictor_impl.history_update(seq_no, piece, pc, br_type, pred_dir, resolve_dir, next_pc);
     }
     else
     {
-        cbp2016_tage_sc_l.TrackOtherInst(pc, br_type, pred_dir, resolve_dir, next_pc);
+        cond_predictor_impl.track_other_inst(pc, inst_class, pred_dir, resolve_dir, next_pc);
+        // cond_predictor_impl.TrackOtherInst(pc, br_type, pred_dir, resolve_dir, next_pc);
     }
 
 }
 
 //
 // notify_instr_decode(uint64_t seq_no, uint8_t piece, uint64_t pc, const DecodeInfo& _decode_info, const uint64_t decode_cycle)
-// 
+//
 // This function is called when any instructions(not just branches) gets decoded.
 // Along with the unique identifying ids(seq_no, piece), PC of the instruction, decode info and cycle are also provided as inputs
 //
@@ -119,7 +115,7 @@ void notify_instr_decode(uint64_t seq_no, uint8_t piece, uint64_t pc, const Deco
 
 //
 // notify_agen_complete(uint64_t seq_no, uint8_t piece, uint64_t pc, const DecodeInfo& _decode_info, const uint64_t mem_va, const uint64_t mem_sz, const uint64_t agen_cycle)
-// 
+//
 // This function is called when any load/store instructions complete agen.
 // Along with the unique identifying ids(seq_no, piece), PC of the instruction, decode info, mem_va and mem_sz and agen_cycle are also provided as inputs
 //
@@ -129,7 +125,7 @@ void notify_agen_complete(uint64_t seq_no, uint8_t piece, uint64_t pc, const Dec
 
 //
 // notify_instr_execute_resolve(uint64_t seq_no, uint8_t piece, uint64_t pc, const bool pred_dir, const ExecuteInfo& _exec_info, const uint64_t execute_cycle)
-// 
+//
 // This function is called when any instructions(not just branches) gets executed.
 // Along with the unique identifying ids(seq_no, piece), PC of the instruction, execute info and cycle are also provided as inputs
 //
@@ -144,7 +140,6 @@ void notify_instr_execute_resolve(uint64_t seq_no, uint8_t piece, uint64_t pc, c
         {
             const bool _resolve_dir = _exec_info.taken.value();
             const uint64_t _next_pc = _exec_info.next_pc;
-            cbp2016_tage_sc_l.update(seq_no, piece, pc, _resolve_dir, pred_dir, _next_pc);
             cond_predictor_impl.update(seq_no, piece, pc, _resolve_dir, pred_dir, _next_pc);
         }
         else
@@ -156,7 +151,7 @@ void notify_instr_execute_resolve(uint64_t seq_no, uint8_t piece, uint64_t pc, c
 
 //
 // notify_instr_commit(uint64_t seq_no, uint8_t piece, uint64_t pc, const bool pred_dir, const ExecuteInfo& _exec_info, const uint64_t commit_cycle)
-// 
+//
 // This function is called when any instructions(not just branches) gets committed.
 // Along with the unique identifying ids(seq_no, piece), PC of the instruction, execute info and cycle are also provided as inputs
 //
@@ -173,6 +168,5 @@ void notify_instr_commit(uint64_t seq_no, uint8_t piece, uint64_t pc, const bool
 //
 void endCondDirPredictor ()
 {
-    cbp2016_tage_sc_l.terminate();
     cond_predictor_impl.terminate();
 }

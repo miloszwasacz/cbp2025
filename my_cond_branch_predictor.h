@@ -78,5 +78,5 @@ class SampleCondPredictor
 // Predictor End
 // =================
 
-#include "intel_cbp.h"
-static IntelSkylakePredictor cond_predictor_impl;
+#include "impls/intel/skylake.h"
+static intel::SkylakeCBP cond_predictor_impl;
