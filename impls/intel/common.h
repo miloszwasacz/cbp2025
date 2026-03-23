@@ -159,8 +159,9 @@ namespace intel::common {
                         f ^= hist.bit_at(even_bit(i));
                     }
                     for (ssize_t j = j_hi; j >= j_lo && odd_bit(j) >= 0; --j) {
-                        f ^= hist.bit_at(even_bit(j));
+                        f ^= hist.bit_at(odd_bit(j));
                     }
+                    idx |= f & 0b1;
                 }
             }
 

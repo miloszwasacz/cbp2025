@@ -1764,4 +1764,4 @@ class CBP2016_TAGE_SC_L
 #undef UINT64
 
 #endif
-static CBP2016_TAGE_SC_L cbp2016_tage_sc_l;
+// static CBP2016_TAGE_SC_L cbp2016_tage_sc_l;

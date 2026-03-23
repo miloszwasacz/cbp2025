@@ -49,8 +49,10 @@ namespace tage::common {
     // the pipeline and later used to
     template<typename Hist>
     struct pred_info_t {
-        std::pair<bool, size_t> pred;
-        std::pair<bool, size_t> altpred;
+        using pred_t = std::pair<bool, size_t>;
+
+        pred_t pred;
+        pred_t altpred;
         Hist hist;
 
         pred_info_t(const std::pair<bool, size_t> &pred, const std::pair<bool, size_t> &altpred,
@@ -199,6 +201,8 @@ namespace tage::common {
 
     template<typename Hist, typename PHT>
     class TageBase {
+        using pred_t = pred_info_t<Hist>::pred_t;
+
     public:
         virtual ~TageBase() = default;
 
@@ -212,15 +216,15 @@ namespace tage::common {
             const auto id = get_unique_inst_id(seq_no, piece);
             const auto &hist = get_hist();
 
-            std::pair pred = {base.predict(PC), BASE_PRED_NUMBER};
-            std::pair altpred = pred;
+            pred_t pred = {base.predict(PC), BASE_PRED_NUMBER};
+            pred_t altpred = pred;
 
             for (size_t i = 0; i < PHT_COUNT; i++) {
                 const auto &table = phts[PHT_COUNT - i - 1];
                 const auto out = table.predict(hist, PC);
                 if (!out.has_value()) continue;
 
-                const std::pair p = {out.value(), PHT_COUNT - i};
+                const pred_t p = {out.value(), PHT_COUNT - i};
                 if (pred.second == 0) {
                     pred = p;
                 } else if (altpred.second == 0) {
@@ -244,42 +248,45 @@ namespace tage::common {
         virtual void update(const uint64_t seq_no, const uint8_t piece, const uint64_t PC, const bool resolveDir,
                             const bool predDir, const uint64_t nextPC) {
             const auto id = get_unique_inst_id(seq_no, piece);
-            if (const auto &info = spec_pred_info.at(id); info.pred.second == BASE_PRED_NUMBER) {
+            const auto &info = spec_pred_info.at(id);
+
+            // Update provider component
+            if (info.pred.second == BASE_PRED_NUMBER) {
                 base.update(PC, resolveDir);
             } else {
-                // Update provider component
                 phts[info.pred.second - 1].update_provider(info, PC, predDir, resolveDir);
+            }
 
-                if (resolveDir != predDir) {
-                    // Find a new entry in further table to allocate
-                    size_t next = 0, next_next = 0;
-                    for (size_t i = info.pred.second; i < PHT_COUNT; ++i) {
-                        if (phts[i].can_allocate(info, PC)) {
-                            if (next == 0) {
-                                next = i;
-                            } else {
-                                next_next = i;
-                                break;
-                            }
+            if (resolveDir != predDir) {
+                // Find a new entry in further table to allocate
+                size_t next = -1, next_next = -1;
+                static_assert(PHT_COUNT < static_cast<size_t>(-1));
+                for (size_t i = info.pred.second; i < PHT_COUNT; ++i) {
+                    if (phts[i].can_allocate(info, PC)) {
+                        if (next == -1) {
+                            next = i;
+                        } else {
+                            next_next = i;
+                            break;
                         }
                     }
-
-                    if (next == 0) {
-                        // No entries can be allocated, decrement all `u`s
-                        for (size_t i = info.pred.second; i < PHT_COUNT; ++i) {
-                            phts[i].decrement_us();
-                        }
-                        return;
-                    }
-
-                    if (next_next != 0) {
-                        //TODO Choose between next and next_next, with higher probability of picking next
-
-                        // next = rand(0, 1) > threshold ? next : next_next;
-                    }
-
-                    phts[next].allocate(info, PC);
                 }
+
+                if (next == -1) {
+                    // No entries can be allocated, decrement all `u`s
+                    for (size_t i = info.pred.second; i < PHT_COUNT; ++i) {
+                        phts[i].decrement_us();
+                    }
+                    return;
+                }
+
+                if (next_next != -1) {
+                    //TODO Choose between next and next_next, with higher probability of picking next
+
+                    // next = rand(0, 1) > threshold ? next : next_next;
+                }
+
+                phts[next].allocate(info, PC);
             }
 
             age_us();
