@@ -63,33 +63,17 @@ namespace tage::common {
     // A 4-way set associative table of predictions.
     template<typename Hist>
     class pht_t {
-        class tag_t {
-        public:
-            explicit tag_t(const Hist &hist, const uint64_t addr) {
-                // Only a lower part of the address is used
-                constexpr uint64_t mask = ~(std::numeric_limits<uint64_t>::max() << 13);
-                const uint16_t pc_bits = addr & mask;
-                val = {hist, pc_bits};
-            }
-
-            bool operator==(const tag_t &other) const {
-                return val == other.val;
-            }
-
-        private:
-            // TODO More accurate tags? (unknown hash & folding function)
-            std::pair<Hist, uint16_t> val;
-        };
+        using tag_t = uint64_t;
 
         struct entry_t {
             n_bit_predictor<3> pred;
             tag_t tag;
             u_ctr<2> u;
 
-            explicit entry_t(tag_t tag) : tag(std::move(tag)) {
+            explicit entry_t(const tag_t tag) : tag(tag) {
             }
 
-            entry_t() : entry_t(tag_t(Hist(), 0)) {
+            entry_t() : entry_t(0) {
             }
         };
 
@@ -106,7 +90,7 @@ namespace tage::common {
         virtual ~pht_t() = default;
 
         [[nodiscard]] std::optional<bool> predict(const Hist &hist, const uint64_t pc) const {
-            const tag_t tag(hist, pc);
+            const tag_t tag = this->tag(hist, pc);
             for (const auto &ways = entries[index(hist, pc)]; const auto &entry: ways) {
                 if (entry.tag == tag) {
                     return entry.pred.predict();
@@ -118,7 +102,7 @@ namespace tage::common {
 
         void update_provider(const pred_info_t<Hist> &info, const uint64_t pc, const bool predDir,
                              const bool resolveDir) {
-            const tag_t tag(info.hist, pc);
+            const tag_t tag = this->tag(info.hist, pc);
             for (auto &ways = entries[index(info.hist, pc)]; auto &entry: ways) {
                 if (entry.tag != tag) continue;
 
@@ -148,8 +132,8 @@ namespace tage::common {
                 [](auto &way) { return way.u.value() == 0; }
             );
             assert(entry != ways.end());
-            tag_t tag(info.hist, pc);
-            *entry = entry_t(std::move(tag));
+            const tag_t tag = this->tag(info.hist, pc);
+            *entry = entry_t(tag);
         }
 
         void decrement_us() {
@@ -170,6 +154,8 @@ namespace tage::common {
 
     protected:
         [[nodiscard]] virtual size_t index(const Hist &hist, uint64_t pc) const = 0;
+
+        [[nodiscard]] virtual size_t tag(const Hist &hist, uint64_t pc) const = 0;
 
         std::array<std::array<entry_t, 4>, PHT_SIZE> entries;
         size_t level;
@@ -193,10 +179,7 @@ namespace tage::common {
             return pc & mask;
         }
 
-        std::array<n_bit_predictor<3>, BASE_SIZE> entries;
-        //TODO The papers don't state the N for base predictor entries -- one
-        //     of them only states that _all_ PHT tables use 3-bit counters
-        //     (it is not clear whether that also applies to the base predictor).
+        std::array<n_bit_predictor<2>, BASE_SIZE> entries;
     };
 
     template<typename Hist, typename PHT>

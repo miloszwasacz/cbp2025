@@ -9,6 +9,10 @@
 
 namespace intel {
     using tage::common::PHT_COUNT;
+
+    // Based on the observation that only 13 LSBs of the PC affect the tags.
+    static constexpr size_t TAG_WIDTH = 13;
+    static constexpr size_t IDX_WIDTH = tage::common::PHT_SIZE_POW;
 }
 
 namespace intel::common {
@@ -100,7 +104,7 @@ namespace intel::common {
         }
 
     protected:
-        [[nodiscard]] size_t index(const hist_t &hist, const uint64_t pc) const override {
+        [[nodiscard]] size_t fold_hist(const hist_t &hist) const {
             std::function<ssize_t(ssize_t i)> even_start, odd_start;
             ssize_t i_hi, i_lo, j_hi, j_lo;
             switch (level) {
@@ -142,30 +146,39 @@ namespace intel::common {
                     std::abort();
             }
 
-            size_t idx = (pc >> 5) & 0b1;
-            // History folding
-            {
-                constexpr uint8_t FOLD_LEN = 8;
-                for (uint8_t offset = 0; offset < FOLD_LEN; offset++) {
-                    idx <<= 1;
-                    const auto even_bit = [offset, even_start](const ssize_t i) {
-                        return even_start(i) - static_cast<ssize_t>(2 * offset);
-                    };
-                    const auto odd_bit = [offset, odd_start](const ssize_t j) {
-                        return odd_start(j) - static_cast<ssize_t>(2 * offset);
-                    };
-                    size_t f = 0;
-                    for (ssize_t i = i_hi; i >= i_lo; --i) {
-                        f ^= hist.bit_at(even_bit(i));
-                    }
-                    for (ssize_t j = j_hi; j >= j_lo && odd_bit(j) >= 0; --j) {
-                        f ^= hist.bit_at(odd_bit(j));
-                    }
-                    idx |= f & 0b1;
+            constexpr uint8_t FOLD_LEN = 8;
+            size_t folded = 0;
+            for (uint8_t offset = 0; offset < FOLD_LEN; offset++) {
+                folded <<= 1;
+                const auto even_bit = [offset, even_start](const ssize_t i) {
+                    return even_start(i) - static_cast<ssize_t>(2 * offset);
+                };
+                const auto odd_bit = [offset, odd_start](const ssize_t j) {
+                    return odd_start(j) - static_cast<ssize_t>(2 * offset);
+                };
+                size_t f = 0;
+                for (ssize_t i = i_hi; i >= i_lo; --i) {
+                    f ^= hist.bit_at(even_bit(i));
                 }
+                for (ssize_t j = j_hi; j >= j_lo && odd_bit(j) >= 0; --j) {
+                    f ^= hist.bit_at(odd_bit(j));
+                }
+                folded |= f & 0b1;
             }
+            return folded;
+        }
 
+        [[nodiscard]] size_t index(const hist_t &hist, const uint64_t pc) const override {
+            size_t idx = (pc >> 5) & 0b1;
+            idx <<= IDX_WIDTH - 1;
+            idx |= fold_hist(hist);
             return idx;
+        }
+
+        [[nodiscard]] size_t tag(const phr_t::phist_t &hist, const uint64_t pc) const override {
+            size_t tag = pc & ((1 << TAG_WIDTH) - 1);
+            tag ^= fold_hist(hist);
+            return tag;
         }
     };
 

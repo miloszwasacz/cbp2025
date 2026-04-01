@@ -11,6 +11,7 @@ namespace tage {
     public:
         using phist_t = uint16_t;
         static constexpr size_t PHIST_SIZE = sizeof(phist_t) * CHAR_BIT;
+        static constexpr size_t UPDATE_SHIFT = 1;
 
         class ghist_t {
             // The number of integers used to store the value.
@@ -84,12 +85,12 @@ namespace tage {
 
         void update(const bool taken, const uint64_t addr) {
             // Update GHIST
-            reg.first.shift(1);
+            reg.first.shift(UPDATE_SHIFT);
             reg.first.or_lsb(taken);
 
             // Update PHIST
-            reg.second <<= 1;
-            reg.second |= addr & 0b1;
+            reg.second <<= UPDATE_SHIFT;
+            reg.second |= addr & ((1 << UPDATE_SHIFT) - 1);
         }
 
         [[nodiscard]] const std::pair<ghist_t, phist_t> &value() const {
@@ -105,71 +106,103 @@ namespace tage {
     using hist_t = std::pair<ghr_t::ghist_t, ghr_t::phist_t>;
 
     class pht_t : public common::pht_t<hist_t> {
+        using folded_hist_t = size_t;
+        static constexpr size_t TAG_WIDTH = intel::TAG_WIDTH;
+        static constexpr size_t IDX_WIDTH = intel::IDX_WIDTH;
+        // We use the same tag and index widths as the intel to make a fair comparison.
+        static_assert(sizeof(folded_hist_t) * CHAR_BIT >= TAG_WIDTH);
+        static_assert(sizeof(folded_hist_t) * CHAR_BIT >= IDX_WIDTH);
+
     public:
         explicit pht_t(const size_t level) : common::pht_t<hist_t>(level) {
+            switch (level) {
+                case 1:
+                    hist_len = 10;
+                    break;
+                case 2:
+                    hist_len = 35;
+                    break;
+                case 3:
+                    hist_len = ghr_t::ghist_t::SIZE;
+                    break;
+                default:
+                    assert(false && "unimplemented level");
+            }
+        }
+
+        void update_folded_ghist(const hist_t &new_ghist, const bool taken) {
+            auto update = [this, taken](folded_hist_t &fold, const size_t width) {
+                assert(width < sizeof(folded_hist_t) * CHAR_BIT);
+
+                const auto carry = (fold >> (width - 1)) & 0b1;
+                fold = ((fold << 1) | carry) & ((1 << width) - 1); // ROTL
+                fold ^= taken;
+                fold ^= (next_evicted_bit << (hist_len % width));
+            };
+            update(idx_fold, IDX_WIDTH);
+            update(tag_fold[0], TAG_WIDTH);
+            update(tag_fold[1], TAG_WIDTH - 1);
+
+            next_evicted_bit = new_ghist.first.bits_at(ghr_t::ghist_t::SIZE - 1, 1) & 0b1;
         }
 
     protected:
+        static void fold_phist_into(size_t &val, const hist_t &hist, const size_t mask) {
+            ghr_t::phist_t phist = hist.second;
+            for (size_t i = 0; i < ghr_t::PHIST_SIZE; i += IDX_WIDTH) {
+                val ^= phist & mask;
+                phist >>= IDX_WIDTH;
+            }
+        }
+
         [[nodiscard]] size_t index(const hist_t &hist, const uint64_t pc) const override {
-            // We use an index with the same length as the Intel CBP.
-            constexpr size_t CHUNK_SIZE = common::PHT_SIZE_POW;
-            constexpr u_int64_t CHUNK_MASK = (1 << CHUNK_SIZE) - 1;
+            constexpr size_t MASK = (1 << IDX_WIDTH) - 1;
 
             size_t idx = 0;
 
-            // PC folding
+            // Folded (partial) PC
             {
                 constexpr size_t chunk_count = 2;
                 uint64_t folding_pc = pc;
                 for (size_t i = 0; i < chunk_count; ++i) {
-                    idx ^= folding_pc & CHUNK_MASK;
-                    folding_pc >>= CHUNK_SIZE;
+                    idx ^= folding_pc & MASK;
+                    folding_pc >>= IDX_WIDTH;
                 }
             }
 
-            // Simple PHIST folding
-            {
-                ghr_t::phist_t phist = hist.second;
-                for (size_t i = 0; i < ghr_t::PHIST_SIZE; i += CHUNK_SIZE) {
-                    idx ^= phist & CHUNK_MASK;
-                    phist >>= CHUNK_SIZE;
-                }
-            }
+            // Folded PHIST
+            fold_phist_into(idx, hist, MASK);
 
-            // Simple GHIST folding
-            {
-                size_t chunk_count;
-                switch (level) {
-                    case 1: {
-                        chunk_count = 2;
-                        break;
-                    }
-                    case 2: {
-                        chunk_count = 6;
-                        break;
-                    }
-                    case 3: {
-                        constexpr size_t c = ghr_t::ghist_t::SIZE / CHUNK_SIZE;
-                        if constexpr (ghr_t::ghist_t::SIZE % CHUNK_SIZE != 0) {
-                            // ReSharper disable once CppDFAUnreachableCode
-                            chunk_count = c + 1;
-                        } else {
-                            // ReSharper disable once CppDFAUnreachableCode
-                            chunk_count = c;
-                        }
-                        break;
-                    }
-                    default: {
-                        assert(false);
-                    }
-                }
-                for (size_t i = 0; i < chunk_count; ++i) {
-                    idx ^= hist.first.bits_at(i * CHUNK_SIZE, CHUNK_SIZE);
-                }
-            }
+            // Folded GHIST
+            idx ^= idx_fold;
 
             return idx;
         }
+
+        [[nodiscard]]
+        size_t tag(const std::pair<ghr_t::ghist_t, unsigned short> &hist, const uint64_t pc) const override {
+            constexpr size_t MASK = (1 << IDX_WIDTH) - 1;
+
+            size_t tag = 0;
+
+            // Folded (partial) PC
+            tag ^= pc & MASK;
+
+            // Folded PHIST
+            fold_phist_into(tag, hist, MASK);
+
+            // Folded GHIST
+            tag ^= tag_fold[0];
+            tag ^= tag_fold[1] << 1;
+
+            return tag;
+        }
+
+    private:
+        size_t hist_len;
+        folded_hist_t idx_fold = 0;
+        std::array<folded_hist_t, 2> tag_fold = {};
+        folded_hist_t next_evicted_bit = 0;
     };
 
     // Academic TAGE Conditional Branch Predictor from the 2006 paper.
@@ -182,6 +215,9 @@ namespace tage {
         void history_update(const uint64_t seq_no, const uint8_t piece, const uint64_t PC, const bool taken,
                             const uint64_t nextPC) override {
             ghr.update(taken, PC);
+            for (auto &pht: phts) {
+                pht.update_folded_ghist(ghr.value(), taken);
+            }
         }
 
         void track_other_inst(const uint64_t PC, const InstClass instClass, const bool predDir, const bool resolveDir,
