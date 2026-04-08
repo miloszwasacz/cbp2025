@@ -10,8 +10,8 @@
 
 namespace tage::common {
     inline constexpr size_t PHT_COUNT = 3;
-    inline constexpr size_t PHT_SIZE_POW = 9;
-    inline constexpr size_t PHT_SIZE = 1 << PHT_SIZE_POW; // 2^9
+    inline constexpr size_t PHT_LOG_SIZE = 9;
+    inline constexpr size_t PHT_SIZE = 1 << PHT_LOG_SIZE; // 2^9
     inline constexpr size_t BASE_SIZE = 1 << 13; // 2^13
     inline constexpr size_t BASE_PRED_NUMBER = 0;
     inline constexpr uint64_t U_RESET_THRESHOLD = 256000;
@@ -26,8 +26,8 @@ namespace tage::common {
             val = 0;
         }
 
-        void update(const bool taken) {
-            val = std::clamp(val + (taken ? 1 : -1), 0, {MAX});
+        void update(const bool correct) {
+            val = std::clamp(val + (correct ? 1 : -1), 0, {MAX});
         }
 
         [[nodiscard]] int16_t value() const {
@@ -208,9 +208,9 @@ namespace tage::common {
                 if (!out.has_value()) continue;
 
                 const pred_t p = {out.value(), PHT_COUNT - i};
-                if (pred.second == 0) {
+                if (pred.second == BASE_PRED_NUMBER) {
                     pred = p;
-                } else if (altpred.second == 0) {
+                } else if (altpred.second == BASE_PRED_NUMBER) {
                     altpred = p;
                     break;
                 }

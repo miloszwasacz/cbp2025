@@ -37,11 +37,12 @@ namespace intel {
             }
         }
 
-    private:
+    protected:
         const common::hist_t &get_hist() override {
             return phr.value();
         }
 
+    private:
         common::phr_t phr;
     };
 }

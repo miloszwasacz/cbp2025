@@ -12,7 +12,7 @@ namespace intel {
 
     // Based on the observation that only 13 LSBs of the PC affect the tags.
     static constexpr size_t TAG_WIDTH = 13;
-    static constexpr size_t IDX_WIDTH = tage::common::PHT_SIZE_POW;
+    static constexpr size_t IDX_WIDTH = tage::common::PHT_LOG_SIZE;
 }
 
 namespace intel::common {
