@@ -54,8 +54,6 @@ namespace apple {
 #define PC(IDX) (((pc) >> IDX) & 0b1)
 #define PHRT(IDX) hist.phrt.bit_at(IDX)
 #define PHRB(IDX) hist.phrb.bit_at(IDX)
-#define XOR(P1, P2, P3) (P1 ^ P2 ^ P3)
-#define XOR2(P1, P2) (P1 ^ P2)
 #define PUSH_BIT(idx, B) { \
     idx <<= 1;\
     idx |= B;\
@@ -299,8 +297,6 @@ namespace apple {
 #undef IDX_FN2
 #undef IDX_FN
 #undef PUSH_BIT
-#undef XOR2
-#undef XOR
 #undef PHRB
 #undef PHRT
 #undef PC
