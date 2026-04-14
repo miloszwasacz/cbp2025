@@ -1,7 +1,5 @@
 #pragma once
 
-#include <iostream>
-
 #include "arm/common.h"
 
 namespace apple::firestorm {
@@ -42,7 +40,10 @@ namespace apple {
     class FirestormCBP final : public arm::common::ArmBase<firestorm::hist_t, firestorm::pht_t> {
     public:
         explicit FirestormCBP() : ArmBase(make_phts()) {
-            std::cout << "Testing Firestorm CBP" << std::endl;
+        }
+
+        [[nodiscard]] const char *name() const override {
+            return "Apple Firestorm";
         }
 
     private:

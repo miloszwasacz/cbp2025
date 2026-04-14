@@ -1,7 +1,5 @@
 #pragma once
 
-#include <iostream>
-
 #include "arm/common.h"
 
 namespace qualcomm::oryon {
@@ -42,7 +40,10 @@ namespace qualcomm {
     class OryonCBP final : public arm::common::ArmBase<oryon::hist_t, oryon::pht_t> {
     public:
         explicit OryonCBP() : ArmBase(make_phts()) {
-            std::cout << "Testing Oryon CBP" << std::endl;
+        }
+
+        [[nodiscard]] const char *name() const override {
+            return "Qualcomm Oryon";
         }
 
     private:

@@ -5,6 +5,7 @@
 #include <climits>
 #include <limits>
 #include <map>
+#include <iostream>
 
 #include "../n_bit_predictor.h"
 
@@ -189,7 +190,10 @@ namespace tage::common {
     public:
         virtual ~TageBase() = default;
 
+        [[nodiscard]] virtual const char *name() const = 0;
+
         virtual void setup() {
+            std::cout << "Testing " << name() << " CBP" << std::endl;
         }
 
         virtual void terminate() {

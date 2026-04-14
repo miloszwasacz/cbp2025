@@ -209,7 +209,10 @@ namespace tage {
     class TAGE2006CBP : public common::TageBase<hist_t, pht_t> {
     public:
         explicit TAGE2006CBP() : TageBase(common::U_RESET_THRESHOLD) {
-            std::cout << "Testing TAGE 2006 CBP" << std::endl;
+        }
+
+        [[nodiscard]] const char *name() const override {
+            return "TAGE2006";
         }
 
         void history_update(const uint64_t seq_no, const uint8_t piece, const uint64_t PC, const bool taken,

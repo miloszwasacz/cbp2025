@@ -9,7 +9,10 @@ namespace intel {
     public:
         //TODO Different threshold?
         SkylakeCBP() : TageBase(tage::common::U_RESET_THRESHOLD) {
-            std::cout << "Testing Skylake CBP" << std::endl;
+        }
+
+        [[nodiscard]] const char *name() const override {
+            return "Intel Skylake";
         }
 
         void history_update(const uint64_t seq_no, const uint8_t piece, const uint64_t PC, const bool taken,
