@@ -2,10 +2,29 @@
 
 #include "tage_common.h"
 #include "intel/common.h"
+#include "firestorm.h"
+#include "oryon.h"
 
 //TODO: Different uarch apart from Skylake (e.g. Alder Lake, Haswell, etc.)
 namespace tage {
-    using common::PHT_COUNT;
+    inline constexpr size_t ARM_PHT_COUNT = arm::common::PHT_COUNT;
+    inline constexpr size_t INTEL_PHT_COUNT = intel::PHT_COUNT;
+    inline constexpr size_t PHT_COUNT = INTEL_PHT_COUNT;
+
+    inline constexpr size_t PHT_ASSOC = 4;
+
+    inline constexpr size_t ARM_IDX_WIDTH = 10;
+    inline constexpr size_t INTEL_IDX_WIDTH = intel::IDX_WIDTH;
+    inline constexpr size_t IDX_WIDTH = INTEL_IDX_WIDTH;
+
+    inline constexpr size_t ARM_TAG_WIDTH = 16;
+    inline constexpr size_t INTEL_TAG_WIDTH = intel::TAG_WIDTH;
+    inline constexpr size_t TAG_WIDTH = INTEL_TAG_WIDTH;
+
+    inline constexpr size_t FIRESTORM_GHR_SIZE = apple::firestorm::PHRT_SIZE + apple::firestorm::PHRB_SIZE;
+    inline constexpr size_t ORYON_GHR_SIZE = qualcomm::oryon::PHRT_SIZE + qualcomm::oryon::PHRB_SIZE;
+    inline constexpr size_t INTEL_GHR_SIZE = intel::common::hist_t::SIZE;
+    inline constexpr size_t GHR_SIZE = INTEL_GHR_SIZE;
 
     class ghr_t {
     public:
@@ -14,18 +33,15 @@ namespace tage {
         static constexpr size_t UPDATE_SHIFT = 1;
 
         class ghist_t {
-            // The number of integers used to store the value.
-            static constexpr size_t COUNT = 3;
             static constexpr size_t CHUNK_SIZE = sizeof(uint64_t) * CHAR_BIT;
 
         public:
-            // To make a fair comparison with the Intel CBP in terms of memory usage,
-            // the size of GHIST + PHIST is the same as PHIST in the Intel counterpart.
-            static constexpr size_t SIZE = intel::common::phr_t::phist_t::SIZE - PHIST_SIZE;
-            static_assert(SIZE <= COUNT * CHUNK_SIZE && SIZE > (COUNT - 1) * CHUNK_SIZE);
+            // To make a fair comparison with other BPs in terms of memory usage,
+            // the size of GHIST + PHIST is the same as PHIST in the other counterpart.
+            static constexpr size_t SIZE = GHR_SIZE - PHIST_SIZE;
 
             bool operator==(const ghist_t &other) const {
-                for (uint8_t i = 0; i < COUNT; ++i) {
+                for (size_t i = 0; i < COUNT; ++i) {
                     if (val[i] != other.val[i]) {
                         return false;
                     }
@@ -79,6 +95,9 @@ namespace tage {
             }
 
         private:
+            // The number of integers used to store the value.
+            static constexpr size_t COUNT = (SIZE / CHUNK_SIZE) + 1;
+
             // The first element of the array is least-significant bitwise.
             uint64_t val[COUNT] = {};
         };
@@ -105,28 +124,54 @@ namespace tage {
 
     using hist_t = std::pair<ghr_t::ghist_t, ghr_t::phist_t>;
 
-    class pht_t : public common::pht_t<hist_t> {
+    class pht_t : public common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT> {
         using folded_hist_t = size_t;
-        static constexpr size_t TAG_WIDTH = intel::TAG_WIDTH;
-        static constexpr size_t IDX_WIDTH = intel::IDX_WIDTH;
         // We use the same tag and index widths as the intel to make a fair comparison.
         static_assert(sizeof(folded_hist_t) * CHAR_BIT >= TAG_WIDTH);
         static_assert(sizeof(folded_hist_t) * CHAR_BIT >= IDX_WIDTH);
 
     public:
-        explicit pht_t(const size_t level) : common::pht_t<hist_t>(level) {
-            switch (level) {
-                case 1:
-                    hist_len = 10;
-                    break;
-                case 2:
-                    hist_len = 35;
-                    break;
-                case 3:
-                    hist_len = ghr_t::ghist_t::SIZE;
-                    break;
-                default:
-                    assert(false && "unimplemented level");
+        explicit pht_t(const size_t level) : common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT>(level) {
+            // ReSharper disable once CppDFAUnreachableCode
+            if constexpr (PHT_COUNT == INTEL_PHT_COUNT) {
+                switch (level) {
+                    case 1:
+                        hist_len = 10;
+                        break;
+                    case 2:
+                        hist_len = 35;
+                        break;
+                    case 3:
+                        hist_len = ghr_t::ghist_t::SIZE;
+                        break;
+                    default:
+                        assert(false && "unimplemented level");
+                }
+            } else if constexpr (PHT_COUNT == ARM_PHT_COUNT) {
+                switch (level) {
+                    case 1:
+                        hist_len = 10;
+                        break;
+                    case 2:
+                        hist_len = 20;
+                        break;
+                    case 3:
+                        hist_len = 30;
+                        break;
+                    case 4:
+                        hist_len = 50;
+                        break;
+                    case 5:
+                        hist_len = 70;
+                        break;
+                    case 6:
+                        hist_len = ghr_t::ghist_t::SIZE;
+                        break;
+                    default:
+                        assert(false && "unimplemented level");
+                }
+            } else {
+                assert(false && "invalid PHT count");
             }
         }
 
@@ -147,17 +192,16 @@ namespace tage {
         }
 
     protected:
-        static void fold_phist_into(size_t &val, const hist_t &hist, const size_t mask) {
+        static void fold_phist_into(size_t &val, const hist_t &hist, const size_t width) {
+            const size_t mask = (1 << width) - 1;
             ghr_t::phist_t phist = hist.second;
-            for (size_t i = 0; i < ghr_t::PHIST_SIZE; i += IDX_WIDTH) {
+            for (size_t i = 0; i < ghr_t::PHIST_SIZE; i += width) {
                 val ^= phist & mask;
-                phist >>= IDX_WIDTH;
+                phist >>= width;
             }
         }
 
         [[nodiscard]] size_t index(const hist_t &hist, const uint64_t pc) const override {
-            constexpr size_t MASK = (1 << IDX_WIDTH) - 1;
-
             size_t idx = 0;
 
             // Folded (partial) PC
@@ -165,13 +209,13 @@ namespace tage {
                 constexpr size_t chunk_count = 2;
                 uint64_t folding_pc = pc;
                 for (size_t i = 0; i < chunk_count; ++i) {
-                    idx ^= folding_pc & MASK;
+                    idx ^= folding_pc & ((1 << IDX_WIDTH) - 1);
                     folding_pc >>= IDX_WIDTH;
                 }
             }
 
             // Folded PHIST
-            fold_phist_into(idx, hist, MASK);
+            fold_phist_into(idx, hist, IDX_WIDTH);
 
             // Folded GHIST
             idx ^= idx_fold;
@@ -181,15 +225,13 @@ namespace tage {
 
         [[nodiscard]]
         size_t tag(const hist_t &hist, const uint64_t pc) const override {
-            constexpr size_t MASK = (1 << TAG_WIDTH) - 1;
-
             size_t tag = 0;
 
             // Folded (partial) PC
-            tag ^= pc & MASK;
+            tag ^= pc & ((1 << TAG_WIDTH) - 1);
 
             // Folded PHIST
-            fold_phist_into(tag, hist, MASK);
+            fold_phist_into(tag, hist, TAG_WIDTH);
 
             // Folded GHIST
             tag ^= tag_fold[0];
@@ -206,7 +248,7 @@ namespace tage {
     };
 
     // Academic TAGE Conditional Branch Predictor from the 2006 paper.
-    class TAGE2006CBP : public common::TageBase<hist_t, pht_t> {
+    class TAGE2006CBP : public common::TageBase<hist_t, pht_t, PHT_COUNT> {
     public:
         explicit TAGE2006CBP() : TageBase(common::U_RESET_THRESHOLD) {
         }

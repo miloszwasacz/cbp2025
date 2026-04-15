@@ -11,10 +11,6 @@
 #include "../perf/base_col_ctr.h"
 
 namespace tage::common {
-    inline constexpr size_t PHT_COUNT = 3;
-    inline constexpr size_t PHT_LOG_SIZE = 9;
-    inline constexpr size_t PHT_SIZE = 1 << PHT_LOG_SIZE; // 2^9
-    inline constexpr size_t PHT_ASSOC = 4;
     inline constexpr size_t BASE_SIZE = 1 << 13; // 2^13
     inline constexpr size_t BASE_PRED_NUMBER = 0;
     inline constexpr uint64_t U_RESET_THRESHOLD = 256000;
@@ -64,7 +60,7 @@ namespace tage::common {
     };
 
     // A 4-way set associative table of predictions.
-    template<typename Hist>
+    template<typename Hist, size_t LOG_SIZE, size_t ASSOC, size_t PHT_COUNT>
     class pht_t {
         using tag_t = uint64_t;
 
@@ -81,11 +77,11 @@ namespace tage::common {
         };
 
     public:
-        explicit pht_t(const size_t level) : col_ctr(PHT_ASSOC, PHT_SIZE) {
+        explicit pht_t(const size_t level) : col_ctr(ASSOC, 1 << LOG_SIZE) {
             assert(level > 0 && level <= PHT_COUNT && "invalid PHT level");
             this->level = level;
             const entry_t entry{};
-            std::array<entry_t, PHT_ASSOC> ways{};
+            std::array<entry_t, ASSOC> ways{};
             ways.fill(entry);
             entries.fill(ways);
         }
@@ -168,7 +164,7 @@ namespace tage::common {
 
         [[nodiscard]] virtual size_t tag(const Hist &hist, uint64_t pc) const = 0;
 
-        std::array<std::array<entry_t, PHT_ASSOC>, PHT_SIZE> entries;
+        std::array<std::array<entry_t, ASSOC>, 1 << LOG_SIZE> entries;
         size_t level;
 
         perf::collision_ctr col_ctr;
@@ -214,7 +210,7 @@ namespace tage::common {
         size_t dir_flips = 0;
     };
 
-    template<typename Hist, typename PHT>
+    template<typename Hist, typename PHT, size_t PHT_COUNT>
     class TageBase {
         using pred_t = pred_info_t<Hist>::pred_t;
 
@@ -328,7 +324,9 @@ namespace tage::common {
         using inst_id_t = uint64_t;
 
         explicit TageBase(const uint64_t u_reset_threshold)
-            : phts{PHT(1), PHT(2), PHT(3)},
+            : phts([&]<size_t ... I>(std::index_sequence<I...>) {
+                  return std::array<PHT, PHT_COUNT>{PHT(I + 1)...};
+              }(std::make_index_sequence<PHT_COUNT>{})),
               u_reset_threshold(u_reset_threshold) {
         }
 
@@ -354,7 +352,7 @@ namespace tage::common {
         }
 
         base_pred_t base;
-        std::array<PHT, PHT_COUNT> phts;
+        std::array<PHT, PHT_COUNT> phts{};
         std::map<inst_id_t, pred_info_t<Hist> > spec_pred_info;
 
     private:

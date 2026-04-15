@@ -8,11 +8,12 @@
 #include "../tage_common.h"
 
 namespace intel {
-    using tage::common::PHT_COUNT;
+    inline constexpr size_t PHT_COUNT = 3;
+    inline constexpr size_t PHT_ASSOC = 4;
 
     // Based on the observation that only 13 LSBs of the PC affect the tags.
     static constexpr size_t TAG_WIDTH = 13;
-    static constexpr size_t IDX_WIDTH = tage::common::PHT_LOG_SIZE;
+    static constexpr size_t IDX_WIDTH = 9;
 }
 
 namespace intel::common {
@@ -98,9 +99,10 @@ namespace intel::common {
     using pred_info_t = tage::common::pred_info_t<hist_t>;
 
     // A 4-way set associative table of predictions.
-    class pht_t : public tage::common::pht_t<hist_t> {
+    class pht_t : public tage::common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT> {
     public:
-        explicit pht_t(const size_t level) : tage::common::pht_t<phr_t::phist_t>(level) {
+        explicit pht_t(const size_t level)
+            : tage::common::pht_t<phr_t::phist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT>(level) {
         }
 
     protected:
@@ -182,5 +184,5 @@ namespace intel::common {
         }
     };
 
-    using TageBase = tage::common::TageBase<hist_t, pht_t>;
+    using TageBase = tage::common::TageBase<hist_t, pht_t, PHT_COUNT>;
 }

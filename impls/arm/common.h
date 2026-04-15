@@ -14,6 +14,7 @@
 namespace arm::common {
     using idx_t = size_t;
     using tag_t = uint16_t;
+    inline constexpr size_t PHT_COUNT = 6;
 
     class base_pred_t {
     public:
@@ -276,7 +277,6 @@ namespace arm::common {
 
     template<typename Hist, typename PHT>
     class ArmBase {
-        static constexpr size_t PHT_COUNT = 6;
         static constexpr size_t BASE_PRED_NUMBER = 0;
 
     protected:
