@@ -8,11 +8,13 @@
 #include <iostream>
 
 #include "../n_bit_predictor.h"
+#include "../perf/base_col_ctr.h"
 
 namespace tage::common {
     inline constexpr size_t PHT_COUNT = 3;
     inline constexpr size_t PHT_LOG_SIZE = 9;
     inline constexpr size_t PHT_SIZE = 1 << PHT_LOG_SIZE; // 2^9
+    inline constexpr size_t PHT_ASSOC = 4;
     inline constexpr size_t BASE_SIZE = 1 << 13; // 2^13
     inline constexpr size_t BASE_PRED_NUMBER = 0;
     inline constexpr uint64_t U_RESET_THRESHOLD = 256000;
@@ -79,11 +81,11 @@ namespace tage::common {
         };
 
     public:
-        explicit pht_t(const size_t level) {
+        explicit pht_t(const size_t level) : col_ctr(PHT_ASSOC, PHT_SIZE) {
             assert(level > 0 && level <= PHT_COUNT && "invalid PHT level");
             this->level = level;
             const entry_t entry{};
-            std::array<entry_t, 4> ways{};
+            std::array<entry_t, PHT_ASSOC> ways{};
             ways.fill(entry);
             entries.fill(ways);
         }
@@ -127,14 +129,15 @@ namespace tage::common {
         }
 
         void allocate(const pred_info_t<Hist> &info, const uint64_t pc) {
-            auto &ways = entries[index(info.hist, pc)];
+            const auto idx = index(info.hist, pc);
+            col_ctr.insert(pc, idx);
+            auto &ways = entries[idx];
             const auto entry = std::ranges::find_if(
                 ways,
                 [](auto &way) { return way.u.value() == 0; }
             );
             assert(entry != ways.end());
-            const tag_t tag = this->tag(info.hist, pc);
-            *entry = entry_t(tag);
+            *entry = entry_t(this->tag(info.hist, pc));
         }
 
         void decrement_us() {
@@ -143,6 +146,7 @@ namespace tage::common {
                     entry.u.update(false);
                 }
             }
+            u_dec++;
         }
 
         void age_us(const bool clear_msb) {
@@ -153,25 +157,49 @@ namespace tage::common {
             }
         }
 
+        void print_stats(const uint8_t indent = 0) const {
+            const std::string idt(indent, '\t');
+            col_ctr.print_stats(idt.size());
+            std::cout << idt << "`u` decrements:\t\t" << u_dec << std::endl;
+        }
+
     protected:
         [[nodiscard]] virtual size_t index(const Hist &hist, uint64_t pc) const = 0;
 
         [[nodiscard]] virtual size_t tag(const Hist &hist, uint64_t pc) const = 0;
 
-        std::array<std::array<entry_t, 4>, PHT_SIZE> entries;
+        std::array<std::array<entry_t, PHT_ASSOC>, PHT_SIZE> entries;
         size_t level;
+
+        perf::collision_ctr col_ctr;
+        size_t u_dec = 0;
     };
 
     class base_pred_t {
     public:
+        explicit base_pred_t() : col_ctr(BASE_SIZE) {
+        }
+
         [[nodiscard]] bool predict(const uint64_t pc) const {
             const auto &entry = entries[index(pc)];
             return entry.predict();
         }
 
         void update(const uint64_t pc, const bool taken) {
-            auto &entry = entries[index(pc)];
+            const size_t idx = index(pc);
+            col_ctr.insert(pc, idx);
+            auto &entry = entries[idx];
+            const auto old = entry.predict();
             entry.update(taken);
+            if (old != entry.predict()) {
+                dir_flips++;
+            }
+        }
+
+        void print_stats(const uint8_t indent = 0) const {
+            const std::string idt(indent, '\t');
+            col_ctr.print_stats(idt.size());
+            std::cout << idt << "Direction flips:\t" << dir_flips << std::endl;
         }
 
     private:
@@ -181,6 +209,9 @@ namespace tage::common {
         }
 
         std::array<n_bit_predictor<2>, BASE_SIZE> entries;
+
+        perf::base_col_ctr col_ctr;
+        size_t dir_flips = 0;
     };
 
     template<typename Hist, typename PHT>
@@ -197,6 +228,20 @@ namespace tage::common {
         }
 
         virtual void terminate() {
+            std::cout <<
+                    "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
+                    << std::endl;
+            print_stats();
+            for (size_t i = phts.size(); i > 0; --i) {
+                std::cout << "PHT #" << i << ":" << std::endl;
+                phts[i - 1].print_stats(1);
+                std::cout << std::endl;
+            }
+            std::cout << "Base predictor:" << std::endl;
+            base.print_stats(1);
+            std::cout <<
+                    "---------------------------------------------------------------------------------------------------------------------------------------"
+                    << std::endl;
         }
 
         [[nodiscard]] virtual bool predict(const uint64_t seq_no, const uint8_t piece, const uint64_t PC) {
@@ -285,6 +330,9 @@ namespace tage::common {
         explicit TageBase(const uint64_t u_reset_threshold)
             : phts{PHT(1), PHT(2), PHT(3)},
               u_reset_threshold(u_reset_threshold) {
+        }
+
+        virtual void print_stats() const {
         }
 
         static inst_id_t get_unique_inst_id(const uint64_t seq_no, const uint8_t piece) {

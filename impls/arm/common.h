@@ -8,6 +8,8 @@
 #include <map>
 
 #include "../tage_common.h"
+#include "../../perf/base_col_ctr.h"
+#include "../../perf/col_ctr.h"
 
 namespace arm::common {
     using idx_t = size_t;
@@ -22,27 +24,50 @@ namespace arm::common {
 
         static constexpr size_t SIZE = 1 << LOG_SIZE;
 
-        explicit base_pred_t() : dir(), hyst() {
+        explicit base_pred_t() : dir(), hyst(), dir_col_ctr(SIZE), hyst_col_ctr(HYST_SIZE) {
             dir.fill(true);
             hyst.fill(0);
         }
 
         [[nodiscard]] bool predict(const uint64_t PC) const {
-            constexpr size_t MASK = SIZE - 1;
-            return dir[(PC >> 2) & MASK];
+            return dir[(PC >> 2) & (SIZE - 1)];
         }
 
         void update(const uint64_t PC, const bool correct) {
             constexpr uint8_t HYST_MAX = (1 << HYST_WIDTH) - 1;
-            auto &d = dir[(PC >> 2) & (SIZE - 1)];
-            auto &h = hyst[(PC >> 2) & (HYST_SIZE - 1)];
+            const size_t dir_idx = (PC >> 2) & (SIZE - 1);
+            const size_t hyst_idx = (PC >> 2) & (HYST_SIZE - 1);
+            dir_col_ctr.insert(PC, dir_idx);
+            // ReSharper disable once CppDFAUnreachableCode
+            if constexpr (LOG_HYST_SHARE > 0) {
+                hyst_col_ctr.insert(PC, hyst_idx);
+            }
+            auto &d = dir[dir_idx];
+            auto &h = hyst[hyst_idx];
 
             if (correct) {
                 h = h < HYST_MAX ? h + 1 : HYST_MAX;
             } else if (h == 0) {
                 d = !d;
+                dir_flips++;
             } else {
                 h--;
+            }
+        }
+
+        void print_stats(const uint8_t indent = 0) const {
+            const std::string idt(indent, '\t');
+            // ReSharper disable once CppDFAUnreachableCode
+            if constexpr (LOG_HYST_SHARE == 0) {
+                dir_col_ctr.print_stats(idt.size());
+                std::cout << idt << "Direction flips:\t" << dir_flips << std::endl;
+            } else {
+                std::cout << idt << "Direction table:" << std::endl;
+                dir_col_ctr.print_stats(idt.size() + 1);
+                std::cout << idt << "\tDirection flips:\t" << dir_flips << std::endl;
+
+                std::cout << idt << "Hysteresis table:" << std::endl;
+                hyst_col_ctr.print_stats(idt.size() + 1);
             }
         }
 
@@ -53,6 +78,10 @@ namespace arm::common {
 
         std::array<bool, SIZE> dir;
         std::array<uint8_t, HYST_SIZE> hyst;
+
+        perf::base_col_ctr dir_col_ctr;
+        perf::base_col_ctr hyst_col_ctr;
+        size_t dir_flips = 0;
     };
 
     template<size_t PHRT_SIZE, size_t PHRB_SIZE>
@@ -137,7 +166,8 @@ namespace arm::common {
         using index_range_t = std::ranges::stride_view<std::ranges::iota_view<size_t, size_t> >;
 
         explicit pht_t(const size_t assoc, const size_t log_size, idx_fn_t index, tag_hist_fold_fn_t fold)
-            : entries(make_entries(log_size, assoc)), make_idx(std::move(index)), tag_fold_hist(std::move(fold)) {
+            : tag_fold_hist(std::move(fold)), col_ctr(assoc, 1 << log_size),
+              entries(make_entries(log_size, assoc)), make_idx(std::move(index)) {
         }
 
         virtual ~pht_t() = default;
@@ -177,7 +207,9 @@ namespace arm::common {
         }
 
         void allocate(const uint64_t pc, const Hist &hist) {
-            auto &ways = entries[make_idx(pc, hist)];
+            const auto idx = make_idx(pc, hist);
+            col_ctr.insert(pc, idx);
+            auto &ways = entries[idx];
             const auto entry = std::ranges::find_if(ways, can_allocate_entry);
             assert(entry != ways.end());
             *entry = entry_t(make_tag(pc, hist));
@@ -189,6 +221,7 @@ namespace arm::common {
                     entry.u.update(false);
                 }
             }
+            u_dec++;
         }
 
         void age_us(const bool clear_msb) {
@@ -199,10 +232,19 @@ namespace arm::common {
             }
         }
 
+        void print_stats(const uint8_t indent = 0) const {
+            const std::string idt(indent, '\t');
+            col_ctr.print_stats(idt.size());
+            std::cout << idt << "`u` decrements:\t\t" << u_dec << std::endl;
+        }
+
     protected:
         [[nodiscard]] virtual tag_t make_tag(uint64_t PC, const Hist &hist) const = 0;
 
         tag_hist_fold_fn_t tag_fold_hist;
+
+        perf::collision_ctr col_ctr;
+        size_t u_dec = 0;
 
     private:
         struct entry_t {
@@ -241,9 +283,6 @@ namespace arm::common {
         using phts_t = std::array<PHT, PHT_COUNT>;
 
     public:
-        explicit ArmBase(phts_t phts) : phts(std::move(phts)) {
-        }
-
         virtual ~ArmBase() = default;
 
         [[nodiscard]] virtual const char *name() const = 0;
@@ -253,6 +292,20 @@ namespace arm::common {
         }
 
         virtual void terminate() {
+            std::cout <<
+                    "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
+                    << std::endl;
+            print_stats();
+            for (size_t i = phts.size(); i > 0; --i) {
+                std::cout << "PHT #" << i << ":" << std::endl;
+                phts[i - 1].print_stats(1);
+                std::cout << std::endl;
+            }
+            std::cout << "Base predictor:" << std::endl;
+            base.print_stats(1);
+            std::cout <<
+                    "---------------------------------------------------------------------------------------------------------------------------------------"
+                    << std::endl;
         }
 
         [[nodiscard]] bool predict(const uint64_t seq_no, const uint8_t piece, const uint64_t PC) {
@@ -345,6 +398,12 @@ namespace arm::common {
 
     protected:
         using inst_id_t = uint64_t;
+
+        explicit ArmBase(phts_t phts) : phts(std::move(phts)) {
+        }
+
+        virtual void print_stats() const {
+        }
 
         static constexpr PHT::index_range_t bit_indices(const size_t fst, const size_t snd, const size_t end) {
             using std::views::iota;

@@ -180,8 +180,8 @@ namespace tage {
         }
 
         [[nodiscard]]
-        size_t tag(const std::pair<ghr_t::ghist_t, unsigned short> &hist, const uint64_t pc) const override {
-            constexpr size_t MASK = (1 << IDX_WIDTH) - 1;
+        size_t tag(const hist_t &hist, const uint64_t pc) const override {
+            constexpr size_t MASK = (1 << TAG_WIDTH) - 1;
 
             size_t tag = 0;
 
