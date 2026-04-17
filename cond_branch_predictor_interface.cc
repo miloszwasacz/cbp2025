@@ -91,15 +91,20 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
 
     if(inst_class == InstClass::condBranchInstClass)
     {
+#ifdef TAGE2016
+        cond_predictor_impl.history_update(seq_no, piece, pc, br_type, pred_dir, resolve_dir, next_pc);
+#else
         cond_predictor_impl.history_update(seq_no, piece, pc, resolve_dir, next_pc);
-        // cond_predictor_impl.history_update(seq_no, piece, pc, br_type, pred_dir, resolve_dir, next_pc);
+#endif
     }
     else
     {
+#ifdef TAGE2016
+        cond_predictor_impl.TrackOtherInst(pc, br_type, pred_dir, resolve_dir, next_pc);
+#else
         cond_predictor_impl.track_other_inst(pc, inst_class, pred_dir, resolve_dir, next_pc);
-        // cond_predictor_impl.TrackOtherInst(pc, br_type, pred_dir, resolve_dir, next_pc);
+#endif
     }
-
 }
 
 //

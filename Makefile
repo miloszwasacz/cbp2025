@@ -26,7 +26,7 @@ OPT = -O3
 LIBS = -lcbp -lz
 #FLAGS = -std=c++11 -L./lib $(LIBS) $(OPT)
 FLAGS = -std=c++23 -L./lib $(LIBS) $(OPT)
-CPPFLAGS = -std=c++23 $(OPT)
+CPPFLAGS += -std=c++23 $(OPT)
 
 OBJ = cond_branch_predictor_interface.o my_cond_branch_predictor.o
 DEPS = cbp.h cond_branch_predictor_interface.h my_cond_branch_predictor.h
@@ -37,7 +37,7 @@ ifeq ($(DEBUG), 1)
 endif
 
 
-.PHONY: clean lib
+.PHONY: shallow_clean clean lib
 
 all: cbp
 
@@ -50,7 +50,9 @@ cbp: $(OBJ) | lib
 %.o: %.cc $(DEPS)
 	$(CC) $(FLAGS) -c -o $@ $<
 
+shallow_clean:
+	rm -f *.o cbp
 
 clean:
-	rm -f *.o cbp
+	make shallow_clean
 	make -C lib clean

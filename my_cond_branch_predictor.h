@@ -1,13 +1,38 @@
 #pragma once
 
-#include "cbp2016_tage_sc_l.h"
-#include "impls/intel/skylake.h"
-#include "impls/tage2006.h"
-#include "impls/firestorm.h"
-#include "impls/oryon.h"
+#ifndef TAGE2006
+#ifndef SKYLAKE
+#ifndef FIRESTORM
+#ifndef ORYON
+#ifndef TAGE2016
+#define ORYON
+#endif
+#endif
+#endif
+#endif
+#endif
 
-// static CBP2016_TAGE_SC_L cond_predictor_impl;
-// static tage::TAGE2006CBP cond_predictor_impl;
-// static intel::SkylakeCBP cond_predictor_impl;
-// static apple::FirestormCBP cond_predictor_impl;
+#ifdef TAGE2006
+#include "impls/tage2006.h"
+static tage::TAGE2006CBP cond_predictor_impl;
+#endif
+
+#ifdef SKYLAKE
+#include "impls/intel/skylake.h"
+static intel::SkylakeCBP cond_predictor_impl;
+#endif
+
+#ifdef FIRESTORM
+#include "impls/firestorm.h"
+static apple::FirestormCBP cond_predictor_impl;
+#endif
+
+#ifdef ORYON
+#include "impls/oryon.h"
 static qualcomm::OryonCBP cond_predictor_impl;
+#endif
+
+#ifdef TAGE2016
+#include "cbp2016_tage_sc_l_104KiB.h"
+static CBP2016_TAGE_SC_L cond_predictor_impl;
+#endif
