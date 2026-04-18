@@ -99,10 +99,10 @@ namespace intel::common {
     using pred_info_t = tage::common::pred_info_t<hist_t>;
 
     // A 4-way set associative table of predictions.
-    class pht_t : public tage::common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT> {
+    class pht_t : public tage::common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT, TAG_WIDTH> {
     public:
         explicit pht_t(const size_t level)
-            : tage::common::pht_t<phr_t::phist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT>(level) {
+            : tage::common::pht_t<phr_t::phist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT, TAG_WIDTH>(level) {
         }
 
     protected:
@@ -184,5 +184,15 @@ namespace intel::common {
         }
     };
 
-    using TageBase = tage::common::TageBase<hist_t, pht_t, PHT_COUNT>;
+    class IntelBase : public tage::common::TageBase<hist_t, pht_t, PHT_COUNT> {
+    public:
+        //TODO Different threshold?
+        explicit IntelBase() : TageBase(tage::common::U_RESET_THRESHOLD) {
+        }
+
+    protected:
+        [[nodiscard]] size_t size() const override {
+            return phr_t::phist_t::SIZE + TageBase::size();
+        }
+    };
 }

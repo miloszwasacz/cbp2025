@@ -5,12 +5,8 @@
 //TODO: Different uarch apart from Skylake (e.g. Alder Lake, Haswell, etc.)
 namespace intel {
     // Intel Skylake Conditional Branch Predictor.
-    class SkylakeCBP final : public common::TageBase {
+    class SkylakeCBP final : public common::IntelBase {
     public:
-        //TODO Different threshold?
-        SkylakeCBP() : TageBase(tage::common::U_RESET_THRESHOLD) {
-        }
-
         [[nodiscard]] const char *name() const override {
             return "Intel Skylake";
         }

@@ -5,14 +5,15 @@
 namespace apple::firestorm {
     static constexpr size_t PHRT_SIZE = 100;
     static constexpr size_t PHRB_SIZE = 28;
+    inline constexpr size_t TAG_WIDTH = 16;
 
     class hist_t final : public arm::common::hist_t<PHRT_SIZE, PHRB_SIZE> {
     };
 
-    class pht_t final : public arm::common::pht_t<hist_t> {
+    class pht_t final : public arm::common::pht_t<hist_t, TAG_WIDTH> {
     public:
         explicit pht_t(const size_t assoc, const size_t log_size, idx_fn_t index, tag_hist_fold_fn_t fold)
-            : arm::common::pht_t<hist_t>(assoc, log_size, std::move(index), std::move(fold)) {
+            : arm::common::pht_t<hist_t, TAG_WIDTH>(assoc, log_size, std::move(index), std::move(fold)) {
         }
 
         ~pht_t() override = default;

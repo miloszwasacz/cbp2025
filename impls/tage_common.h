@@ -60,14 +60,21 @@ namespace tage::common {
     };
 
     // A 4-way set associative table of predictions.
-    template<typename Hist, size_t LOG_SIZE, size_t ASSOC, size_t PHT_COUNT>
+    template<typename Hist, size_t LOG_SIZE, size_t ASSOC, size_t PHT_COUNT, size_t TAG_WIDTH>
     class pht_t {
         using tag_t = uint64_t;
 
         struct entry_t {
-            n_bit_predictor<3> pred;
+        private:
+            static constexpr size_t CTR_WIDTH = 3;
+            static constexpr size_t U_WIDTH = 2;
+
+        public:
+            static constexpr size_t SIZE = CTR_WIDTH + TAG_WIDTH + U_WIDTH;
+
+            n_bit_predictor<CTR_WIDTH> pred;
             tag_t tag;
-            u_ctr<2> u;
+            u_ctr<U_WIDTH> u;
 
             explicit entry_t(const tag_t tag) : tag(tag) {
             }
@@ -153,6 +160,10 @@ namespace tage::common {
             }
         }
 
+        [[nodiscard]] size_t size() const {
+            return (1 << LOG_SIZE) * ASSOC * entry_t::SIZE;
+        }
+
         void print_stats(const uint8_t indent = 0) const {
             const std::string idt(indent, '\t');
             col_ctr.print_stats(idt.size());
@@ -220,7 +231,12 @@ namespace tage::common {
         [[nodiscard]] virtual const char *name() const = 0;
 
         virtual void setup() {
-            std::cout << "Testing " << name() << " CBP" << std::endl;
+            std::cout << "Testing " << name() << " CBP";
+#ifdef PRINT_SIZE
+            const auto s = size();
+            std::cout << " (" << s << " b, " << s / (1024 * 8) << " KiB)";
+#endif
+            std::cout << std::endl;
         }
 
         virtual void terminate() {
@@ -328,6 +344,11 @@ namespace tage::common {
                   return std::array<PHT, PHT_COUNT>{PHT(I + 1)...};
               }(std::make_index_sequence<PHT_COUNT>{})),
               u_reset_threshold(u_reset_threshold) {
+        }
+
+        [[nodiscard]] virtual size_t size() const {
+            return BASE_SIZE +
+                   std::ranges::fold_left(phts, 0, [](auto acc, const auto &pht) { return acc + pht.size(); });
         }
 
         virtual void print_stats() const {

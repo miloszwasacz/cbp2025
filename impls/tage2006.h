@@ -116,6 +116,10 @@ namespace tage {
             return reg;
         }
 
+        [[nodiscard]] static size_t size() {
+            return PHIST_SIZE + ghist_t::SIZE;
+        }
+
     private:
         // Shift registers that hold the current global history and path history.
         // The first element of GHIST is least-significant bitwise.
@@ -124,14 +128,14 @@ namespace tage {
 
     using hist_t = std::pair<ghr_t::ghist_t, ghr_t::phist_t>;
 
-    class pht_t : public common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT> {
+    class pht_t : public common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT, TAG_WIDTH> {
         using folded_hist_t = size_t;
         // We use the same tag and index widths as the intel to make a fair comparison.
         static_assert(sizeof(folded_hist_t) * CHAR_BIT >= TAG_WIDTH);
         static_assert(sizeof(folded_hist_t) * CHAR_BIT >= IDX_WIDTH);
 
     public:
-        explicit pht_t(const size_t level) : common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT>(level) {
+        explicit pht_t(const size_t level) : common::pht_t<hist_t, IDX_WIDTH, PHT_ASSOC, PHT_COUNT, TAG_WIDTH>(level) {
             // ReSharper disable once CppDFAUnreachableCode
             if constexpr (PHT_COUNT == INTEL_PHT_COUNT) {
                 switch (level) {
@@ -284,6 +288,10 @@ namespace tage {
         }
 
     protected:
+        [[nodiscard]] size_t size() const override {
+            return ghr_t::size() + TageBase::size();
+        }
+
         const hist_t &get_hist() override {
             return ghr.value();
         }

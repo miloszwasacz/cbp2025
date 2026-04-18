@@ -1,19 +1,5 @@
 #pragma once
 
-#ifndef TAGE2006
-#ifndef SKYLAKE
-#ifndef FIRESTORM
-#ifndef ORYON
-#ifndef TAGE2016
-#ifndef TAGE2016COOKBOOK
-#define ORYON
-#endif
-#endif
-#endif
-#endif
-#endif
-#endif
-
 #ifdef TAGE2006
 #include "impls/tage2006.h"
 static tage::TAGE2006CBP cond_predictor_impl;

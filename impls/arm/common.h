@@ -56,6 +56,10 @@ namespace arm::common {
             }
         }
 
+        [[nodiscard]] static size_t size() {
+            return SIZE + HYST_SIZE * HYST_WIDTH;
+        }
+
         void print_stats(const uint8_t indent = 0) const {
             const std::string idt(indent, '\t');
             // ReSharper disable once CppDFAUnreachableCode
@@ -87,6 +91,10 @@ namespace arm::common {
 
     template<size_t PHRT_SIZE, size_t PHRB_SIZE>
     struct hist_t {
+        [[nodiscard]] size_t static size() {
+            return PHRT_SIZE + PHRB_SIZE;
+        }
+
         void update(const uint64_t branch, const uint64_t target) {
             // Update PHRT
             phrt.shift(1);
@@ -159,7 +167,7 @@ namespace arm::common {
         Hist hist;
     };
 
-    template<typename Hist>
+    template<typename Hist, size_t TAG_WIDTH>
     class pht_t {
     public:
         using idx_fn_t = std::function<idx_t(uint64_t PC, const Hist &hist)>;
@@ -168,7 +176,8 @@ namespace arm::common {
 
         explicit pht_t(const size_t assoc, const size_t log_size, idx_fn_t index, tag_hist_fold_fn_t fold)
             : tag_fold_hist(std::move(fold)), col_ctr(assoc, 1 << log_size),
-              entries(make_entries(log_size, assoc)), make_idx(std::move(index)) {
+              entries(make_entries(log_size, assoc)), make_idx(std::move(index)),
+              _size((1 << log_size) * assoc * entry_t::SIZE) {
         }
 
         virtual ~pht_t() = default;
@@ -233,6 +242,10 @@ namespace arm::common {
             }
         }
 
+        [[nodiscard]] size_t size() const {
+            return _size;
+        }
+
         void print_stats(const uint8_t indent = 0) const {
             const std::string idt(indent, '\t');
             col_ctr.print_stats(idt.size());
@@ -249,9 +262,16 @@ namespace arm::common {
 
     private:
         struct entry_t {
-            n_bit_predictor<2> dir;
+        private:
+            static constexpr size_t CTR_WIDTH = 2;
+            static constexpr size_t U_WIDTH = 1;
+
+        public:
+            static constexpr size_t SIZE = CTR_WIDTH + TAG_WIDTH + U_WIDTH;
+
+            n_bit_predictor<CTR_WIDTH> dir;
             tag_t tag;
-            tage::common::u_ctr<1> u;
+            tage::common::u_ctr<U_WIDTH> u;
 
             explicit entry_t() : entry_t(0) {
             }
@@ -273,6 +293,7 @@ namespace arm::common {
 
         std::vector<std::vector<entry_t> > entries;
         idx_fn_t make_idx;
+        size_t _size;
     };
 
     template<typename Hist, typename PHT>
@@ -288,7 +309,12 @@ namespace arm::common {
         [[nodiscard]] virtual const char *name() const = 0;
 
         virtual void setup() {
-            std::cout << "Testing " << name() << " CBP" << std::endl;
+            std::cout << "Testing " << name() << " CBP";
+#ifdef PRINT_SIZE
+            const auto s = size();
+            std::cout << " (" << s << " b, " << s / (1024 * 8) << " KiB)";
+#endif
+            std::cout << std::endl;
         }
 
         virtual void terminate() {
@@ -403,6 +429,12 @@ namespace arm::common {
         }
 
         virtual void print_stats() const {
+        }
+
+        size_t size() const {
+            return phr.size() +
+                   base.size() + // NOLINT(*-static-accessed-through-instance)
+                   std::ranges::fold_left(phts, size_t{0}, [](auto acc, const auto &pht) { return acc + pht.size(); });
         }
 
         static constexpr PHT::index_range_t bit_indices(const size_t fst, const size_t snd, const size_t end) {
