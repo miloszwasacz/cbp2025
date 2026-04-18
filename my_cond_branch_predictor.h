@@ -26,6 +26,6 @@ static CBP2016_TAGE_SC_L cond_predictor_impl;
 #endif
 
 #ifdef TAGE2016COOKBOOK
-#include "cbp2016_tage_sc_cookbook.h"
+#include "cbp2016_tage_sc_cookbook_104KiB.h"
 static PREDICTOR cond_predictor_impl;
 #endif
