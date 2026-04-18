@@ -5,7 +5,9 @@
 #ifndef FIRESTORM
 #ifndef ORYON
 #ifndef TAGE2016
+#ifndef TAGE2016COOKBOOK
 #define ORYON
+#endif
 #endif
 #endif
 #endif
@@ -35,4 +37,9 @@ static qualcomm::OryonCBP cond_predictor_impl;
 #ifdef TAGE2016
 #include "cbp2016_tage_sc_l_104KiB.h"
 static CBP2016_TAGE_SC_L cond_predictor_impl;
+#endif
+
+#ifdef TAGE2016COOKBOOK
+#include "cbp2016_tage_sc_cookbook.h"
+static PREDICTOR cond_predictor_impl;
 #endif

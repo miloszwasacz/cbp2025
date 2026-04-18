@@ -50,7 +50,11 @@ void notify_instr_fetch(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint6
 //
 bool get_cond_dir_prediction(uint64_t seq_no, uint8_t piece, uint64_t pc, const uint64_t pred_cycle)
 {
+#ifndef TAGE2016COOKBOOK
     return cond_predictor_impl.predict(seq_no, piece, pc);
+#else
+    return cond_predictor_impl.GetPrediction(pc);
+#endif
 }
 
 //
@@ -91,10 +95,15 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
 
     if(inst_class == InstClass::condBranchInstClass)
     {
+
 #ifdef TAGE2016
         cond_predictor_impl.history_update(seq_no, piece, pc, br_type, pred_dir, resolve_dir, next_pc);
 #else
+#ifdef TAGE2016COOKBOOK
+        cond_predictor_impl.UpdatePredictor(pc, inst_class, resolve_dir, pred_dir, next_pc);
+#else
         cond_predictor_impl.history_update(seq_no, piece, pc, resolve_dir, next_pc);
+#endif
 #endif
     }
     else
@@ -102,7 +111,11 @@ void spec_update(uint64_t seq_no, uint8_t piece, uint64_t pc, InstClass inst_cla
 #ifdef TAGE2016
         cond_predictor_impl.TrackOtherInst(pc, br_type, pred_dir, resolve_dir, next_pc);
 #else
+#ifdef TAGE2016COOKBOOK
+        cond_predictor_impl.TrackOtherInst(pc, inst_class, resolve_dir, next_pc);
+#else
         cond_predictor_impl.track_other_inst(pc, inst_class, pred_dir, resolve_dir, next_pc);
+#endif
 #endif
     }
 }
@@ -143,9 +156,11 @@ void notify_instr_execute_resolve(uint64_t seq_no, uint8_t piece, uint64_t pc, c
     {
         if (is_cond_br(_exec_info.dec_info.insn_class))
         {
+#ifndef TAGE2016COOKBOOK
             const bool _resolve_dir = _exec_info.taken.value();
             const uint64_t _next_pc = _exec_info.next_pc;
             cond_predictor_impl.update(seq_no, piece, pc, _resolve_dir, pred_dir, _next_pc);
+#endif
         }
         else
         {
