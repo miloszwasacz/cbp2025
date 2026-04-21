@@ -5,6 +5,11 @@
 static PREDICTOR cond_predictor_impl;
 #endif
 
+#ifdef TAGE2006BIG
+#include "tage2006_104KiB.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
 #ifdef SKYLAKE
 #include "impls/intel/skylake.h"
 static intel::SkylakeCBP cond_predictor_impl;
