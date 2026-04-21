@@ -12,7 +12,10 @@
 #include <inttypes.h>
 #include <math.h>
 #include <iostream>
+
 #include "lib/sim_common_structs.h"
+#include "perf/base_col_ctr.h"
+#include "perf/col_ctr.h"
 
 
 // TAGE2016 from the "Cookbook" slides with approximately the same size as Firestorm and Oryon
@@ -96,7 +99,6 @@ int BANK1;
 #ifndef INTERLEAVED
 // #define ADJACENTTABLE 1		// ~+0.076,  if 14 tables :7 physical tables: Logical table T(2i-1) and T(2i) are mapped on the the same physical P(i), but the two predictions are adjacent and  are read with index computed with H(2i-1), the tags are respectively computed with  for H(2i-1) and H(2i).
 // #define SHARED 1		// (T1/T9) (T2/T10)   shared the same bank T9 and T10 do not share with anybody: ~ -0.076 MPKI
-#define ADJACENTTABLE 0
 #define SHARED 0
 #endif
 #define OPTGEOHIST // we can do better than geometric series
@@ -386,8 +388,9 @@ int BI;				// index of the bimodal table
 bool pred_taken;		// prediction
 
 
-
-
+perf::base_col_ctr *b_col_ctrs[2];
+perf::collision_ctr *g_col_ctrs[NHIST + 1];
+size_t dir_flips = 0;
 
 
 int
@@ -500,6 +503,29 @@ public:
      }
 
      void terminate() {
+          std::cout <<
+                    "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
+                    << std::endl;
+          for (int i = NHIST; i > 0; --i) {
+               std::cout << "PHT #" << i << ':' << std::endl;
+               g_col_ctrs[i]->print_stats(1);
+               std::cout << std::endl;
+          }
+          std::cout << "Base predictor:" << std::endl;
+#if HYSTSHIFT == 0
+          b_col_ctrs[0]->print_stats(1);
+          std::cout << "\tDirection flips:\t" << dir_flips << std::endl;
+#else
+          std::cout << "\tDirection table:" << std::endl;
+          b_col_ctrs[0]->print_stats(2);
+          std::cout << "\t\tDirection flips:\t" << dir_flips << std::endl;
+
+          std::cout << "\tHysteresis table:" << std::endl;
+          b_col_ctrs[1]->print_stats(2);
+#endif
+          std::cout <<
+                    "---------------------------------------------------------------------------------------------------------------------------------------"
+                    << std::endl;
      }
 
 
@@ -599,7 +625,7 @@ public:
                     printf ("%d ", m[i]);
                printf ("\n");
 #ifndef INTERLEAVED
-               if (SHARED)
+#if SHARED != 0
                {
                     /* tailored for 14 tables */
                     for (int i = 1; i <= 8; i++)
@@ -607,19 +633,26 @@ public:
                     for (int i = 9; i <= 14; i++)
                          gtable[i] = gtable[i - 8];
                }
-
-               else
+#else
                {
                     for (int i = 1; i <= NHIST; i++)
                          gtable[i] = new gentry[(1 << (LOGG)) * ASSOC];
 
                }
+#endif
 #else
                gtable[1]= new gentry[(1 << (LOGG)) * ASSOC *NHIST];
 
                for (int i = 2; i <= NHIST; i++)
                     gtable[i] = gtable[1];
 
+#endif
+#if !defined(INTERLEAVED) && !(SHARED != 0)
+               for (int i = 0; i <= NHIST; i++) {
+                    g_col_ctrs[i] = new perf::collision_ctr(ASSOC, 1 << LOGG);
+               }
+#else
+               static_assert(false, "TODO: implement collision counters");
 #endif
 
                btable = new bentry[1 << LOGB];
@@ -628,6 +661,10 @@ public:
                     ch_i[i].init (m[i], 25 + (2 * ((i - 1) / 2) % 4), i - 1);
                     ch_t[0][i].init (ch_i[i].OLENGTH, 13, i);
                     ch_t[1][i].init (ch_i[i].OLENGTH, 11, i + 2);
+               }
+
+               for (auto &b_col_ctr : b_col_ctrs) {
+                    b_col_ctr = new perf::base_col_ctr(1 << LOGB);
                }
 
                Seed = 0;
@@ -868,13 +905,22 @@ public:
                return (btable[BI].pred !=0);
           }
 
-     void baseupdate (bool Taken)
+     void baseupdate (bool Taken, uint64_t PCBRANCH)
           {
+               const bool old_pred = btable[BI].pred != 0;
+
                int8_t inter = BIM;
                ctrupdate (inter, Taken, BIMWIDTH);
                btable[BI].pred = (inter >= 0);
                btable[BI >> HYSTSHIFT].hyst = (inter >= 0) ? inter : -inter - 1;
 
+               b_col_ctrs[0]->insert(PCBRANCH, BI);
+#if HYSTSHIFT != 0
+               b_col_ctrs[1]->insert(PCBRANCH, BI);
+#endif
+               if (old_pred != (btable[BI].pred != 0)) {
+                    dir_flips++;
+               }
           };
      uint32_t MYRANDOM ()
           {
@@ -905,7 +951,7 @@ public:
                          AHGI[NPRED % 10][i] = gindex (PC, i, phist, ch_i);
                          AHGTAG[NPRED % 10][i] = gtag (PC, i, ch_t[0], ch_t[1]);
                     }
-                    if (SHARED)
+#if SHARED != 0
                     {
                          int X = AHGI[NPRED % 10][1] & 1;
                          for (int i = 2; i <= 6; i++)
@@ -919,6 +965,7 @@ public:
                               AHGI[NPRED % 10][i] ^= X ^ 1;
                          }
                     }
+#endif
 #ifdef INTERLEAVED
 #ifndef ADJACENTTABLE
                     for (int i = 1; i <= NHIST; i++)
@@ -1519,7 +1566,7 @@ public:
 
 #ifdef FILTERALLOCATION
                          // works because the physical tables are shared
-                         if (SHARED)
+#if SHARED != 0
                               if ((i > 8) & (!Test))
                               {
                                    Test= true;
@@ -1533,6 +1580,7 @@ public:
 
 
                               }
+#endif
 #endif
                          bool done = false;
                          uint j = (MYRANDOM () % ASSOC);
@@ -1596,6 +1644,8 @@ public:
                                              gtable[i][GGI[j][i] + j].u =  ((UWIDTH ==2) || (TICKH >= BORNTICK/2)) & (First ? 1: 0);
 #endif
                                              gtable[i][GGI[j][i] + j].ctr = (resolveDir) ? 0 : -1;
+
+                                             g_col_ctrs[i]->insert(PCBRANCH, GGI[j][i] + j);
 
 
 
@@ -1731,7 +1781,7 @@ public:
                               }
 
                               else
-                                   baseupdate (resolveDir);
+                                   baseupdate (resolveDir, PCBRANCH);
                          }
                     }
 
@@ -1741,7 +1791,7 @@ public:
 
                }
                else
-                    baseupdate (resolveDir);
+                    baseupdate (resolveDir, PCBRANCH);
 ////////: note that here it is alttaken that is used: the second hitting entry
 
                if (LongestMatchPred != alttaken)
