@@ -13,8 +13,11 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 #include <cinttypes>
 #include <cmath>
 #include <cassert>
+#include <iostream>
 
 #include "lib/sim_common_structs.h"
+#include "perf/base_col_ctr.h"
+#include "perf/col_ctr.h"
 
 // This values align roughly with Apple Firestorm
 #define LOGB 13
@@ -204,6 +207,10 @@ public:
   gentry *gtable[NHIST];
 // used for storing the history lengths
   int m[NHIST];
+
+	perf::base_col_ctr *b_col_ctrs[2];
+	size_t dir_flips = 0;
+	perf::collision_ctr *g_col_ctrs[NHIST];
   PREDICTOR ()
   {
     int STORAGESIZE = 0;
@@ -243,9 +250,9 @@ public:
 		   NHIST, MINHIST, MAXHIST - 1, STORAGESIZE);
 #endif
 #ifdef PRINT_SIZE
-    printf("Testing TAGE2006 (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
+    printf("Testing TAGE2006 CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
 #else
-  	printf("Testing TAGE2006\n");
+  	printf("Testing TAGE2006 CBP\n");
 #endif
 
     for (int i = 0; i < NHIST; i++)
@@ -261,13 +268,41 @@ public:
 	gtable[i] = new gentry[1 << (LOGG)];
       }
 
-
+  	for (auto &b_col_ctr : b_col_ctrs) {
+  		b_col_ctr = new perf::base_col_ctr(1 << LOGB);
+  	}
+  	for (auto &g_col_ctr : g_col_ctrs) {
+  		g_col_ctr = new perf::collision_ctr(1, 1 << LOGG);
+  	}
   }
 
 	void setup() {
   }
 
 	void terminate() {
+  	std::cout <<
+			  "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
+			  << std::endl;
+	for (int i = 0; i < NHIST; ++i) {
+  		std::cout << "PHT #" << NHIST - i << ':' << std::endl;
+		g_col_ctrs[i]->print_stats(1);
+		std::cout << std::endl;
+  	}
+  	std::cout << "Base predictor:" << std::endl;
+#if HYSTSHIFT == 0
+  	b_col_ctrs[0]->print_stats(1);
+  	std::cout << "\tDirection flips:\t" << dir_flips << std::endl;
+#else
+  	std::cout << "\tDirection table:" << std::endl;
+  	b_col_ctrs[0]->print_stats(2);
+  	std::cout << "\t\tDirection flips:\t" << dir_flips << std::endl;
+
+  	std::cout << "\tHysteresis table:" << std::endl;
+  	b_col_ctrs[1]->print_stats(2);
+#endif
+  	std::cout <<
+			  "---------------------------------------------------------------------------------------------------------------------------------------"
+			  << std::endl;
   }
 
 
@@ -428,7 +463,8 @@ public:
   void baseupdate (address_t pc, bool Taken)
   {
 //just a normal 2-bit counter apart that hysteresis is shared
-    if (Taken == getbim (pc))
+  	const bool old_pred = getbim(pc);
+    if (Taken == old_pred)
       {
 
 	if (Taken)
@@ -457,10 +493,17 @@ public:
 	  }
 
 	btable[BI].pred = inter >> 1;
-	btable[BI >> 2].hyst = (inter & 1);
+	btable[BI >> HYSTSHIFT].hyst = (inter & 1);
 
       }
 
+  	b_col_ctrs[0]->insert(pc, BI);
+#if HYSTSHIFT != 0
+  	b_col_ctrs[1]->insert(pc, BI);
+#endif
+  	if (old_pred != getbim(pc)) {
+  		dir_flips++;
+  	}
   }
 //just building our own simple pseudo random number generator based on linear feedback shift register
   int Seed;
@@ -590,6 +633,7 @@ public:
 			gtable[T][GI[T]].tag = gtag (pc, T);
 			gtable[T][GI[T]].ctr = (taken) ? 0 : -1;
 			gtable[T][GI[T]].ubit = 0;
+		    g_col_ctrs[T]->insert(pc, GI[T]);
 			break;
 		      }
 		  }
