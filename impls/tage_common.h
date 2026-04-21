@@ -12,6 +12,7 @@
 
 namespace tage::common {
     inline constexpr size_t BASE_SIZE = 1 << 13; // 2^13
+    inline constexpr size_t BASE_WIDTH = 2;
     inline constexpr size_t BASE_PRED_NUMBER = 0;
     inline constexpr uint64_t U_RESET_THRESHOLD = 256000;
 
@@ -215,7 +216,7 @@ namespace tage::common {
             return pc & mask;
         }
 
-        std::array<n_bit_predictor<2>, BASE_SIZE> entries;
+        std::array<n_bit_predictor<BASE_WIDTH>, BASE_SIZE> entries;
 
         perf::base_col_ctr col_ctr;
         size_t dir_flips = 0;
@@ -347,7 +348,7 @@ namespace tage::common {
         }
 
         [[nodiscard]] virtual size_t size() const {
-            return BASE_SIZE +
+            return BASE_SIZE * BASE_WIDTH +
                    std::ranges::fold_left(phts, 0, [](auto acc, const auto &pht) { return acc + pht.size(); });
         }
 

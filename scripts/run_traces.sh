@@ -9,12 +9,17 @@ traces=(
 	"int"
 )
 
-if [ $# -ne 1 ]; then
-    echo "Usage: run_traces.sh <cbp-dir>"
+if [ $# -ne 2 ]; then
+    echo "Usage: run_traces.sh <cbp> <results-dir>"
     exit 1
 fi
 
-CBP_DIR="${1}"
+CBP_DIR="${2}"
+CPPFLAGS="-D${1} -DPRINT_SIZE"
+export CPPFLAGS
+
+make shallow_clean
+make
 
 for trace in ${traces[@]}; do
     echo "===${trace}==="

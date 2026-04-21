@@ -1,8 +1,8 @@
 #pragma once
 
 #ifdef TAGE2006
-#include "impls/tage2006.h"
-static tage::TAGE2006CBP cond_predictor_impl;
+#include "tage2006.h"
+static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef SKYLAKE
