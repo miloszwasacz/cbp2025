@@ -11,8 +11,10 @@ static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef SKYLAKE
-#include "impls/intel/skylake.h"
-static intel::SkylakeCBP cond_predictor_impl;
+// #include "impls/intel/skylake.h"
+// static intel::SkylakeCBP cond_predictor_impl;
+#include "skylake.h"
+static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef FIRESTORM

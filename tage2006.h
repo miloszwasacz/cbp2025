@@ -518,7 +518,7 @@ public:
 
 
   // PREDICTOR UPDATE
-  void update_predictor (const address_t pc, const InstClass op, const bool taken)
+  void update_predictor (const address_t pc, const InstClass op, const bool taken, const address_t nextPC)
   {
 
   	bool is_conditional = false;

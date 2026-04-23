@@ -14,19 +14,21 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 #include <cmath>
 #include <cassert>
 #include <iostream>
+#include <climits>
 
 #include "lib/sim_common_structs.h"
 #include "perf/base_col_ctr.h"
 #include "perf/col_ctr.h"
 
-// This values align roughly with Apple Firestorm
 #define LOGB 13
 #define HYSTSHIFT 0
-#define NHIST 6
-#define CBITS 2
-#define TBITS 14
-#define UBITS 1
-#define LOGG 13
+#define NHIST 3
+#define CBITS 3
+#define TBITS 13
+#define UBITS 2
+#define LOGG 9
+#define LOGASSOC 2
+#define ASSOC (1 << LOGASSOC)
 
 #define ASSERT(cond) if (!(cond)) {printf("assert line %d\n",__LINE__); exit(EXIT_FAILURE);}
 
@@ -56,7 +58,7 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 
 
 
-// bits per counter in the global history tables 
+// bits per counter in the global history tables
 #ifndef CBITS
 #define CBITS 3
 #endif
@@ -89,57 +91,66 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 
 
 
-//AS: we use Geometric history length
-//AS: maximum global history length used and minimum history length
-#ifndef MAXHIST
-#define MAXHIST 131
-#define MINHIST 5
-#endif
+#define MAXHIST (93 * 2)
 
 
 using namespace std;
 
 
 typedef uint64_t address_t;
-typedef bitset < MAXHIST > history_t;
-
-
-// this is the cyclic shift register for folding 
-// a long global history into a smaller number of bits
-//#define INITRAND
-class folded_history
-{
-public:
-  unsigned comp;
-  int CLENGTH;
-  int OLENGTH;
-  int OUTPOINT;
-
-    folded_history ()
-  {
-  }
-
-  void init (int original_length, int compressed_length)
-  {
-    comp = 0;
-    OLENGTH = original_length;
-    CLENGTH = compressed_length;
-    OUTPOINT = OLENGTH % CLENGTH;
-    ASSERT (OLENGTH < MAXHIST);
-  }
-
-  void update (history_t h)
-  {
-    ASSERT ((comp >> CLENGTH) == 0);
-    comp = (comp << 1) | h[0];
-    comp ^= h[OLENGTH] << OUTPOINT;
-    comp ^= (comp >> CLENGTH);
-    comp &= (1 << CLENGTH) - 1;
-  }
-};
-
+typedef bitset <MAXHIST> history_t;
 
 // all the predictor is there
+
+template <typename fold_t>
+fold_t fold_history(const history_t &hist, const int fold_len, const int bank) {
+	assert(fold_len <= sizeof(fold_t) * CHAR_BIT && fold_len > 0);
+	int max_i, min_i, max_j, min_j;
+	switch (bank) {
+		case 0:
+			max_i = 16 * 11 + 8;
+			min_i = 16 * 1 - 6;
+			max_j = 16 * 11 + 1;
+			min_j = 1;
+			break;
+		case 1:
+			max_i = 16 * 3 + 8;
+			min_i = 16 * 1 - 6;
+			max_j = 16 * 3 + 1;
+			min_j = 1;
+			break;
+		case 2:
+			max_i = 20;
+			min_i = 6;
+			max_j = 15;
+			min_j = 1;
+			break;
+		default:
+			assert(false);
+	}
+
+	fold_t fold = 0;
+
+	int i = max_i;
+	int j = max_j;
+	while (j >= min_j || i >= min_i) {
+		fold_t tmp_fold = 0;
+		for (int b = fold_len - 1; b >= 0; --b) {
+			tmp_fold <<= 1;
+			if (i >= min_i) {
+				tmp_fold ^= hist[i];
+				i -= 2;
+			}
+			if (j >= min_j) {
+				tmp_fold ^= hist[j];
+				j -= 2;
+			}
+		}
+		fold ^= tmp_fold;
+	}
+
+	return fold;
+}
 
 class PREDICTOR
 {
@@ -198,85 +209,47 @@ public:
 // 4 bits to determine whether newly allocated entries should be considered as
 // valid or not for delivering  the prediction
   int TICK;
-  int phist;
 // use a path history as for the OGEHL predictor
-  history_t ghist;
-  folded_history ch_i[NHIST];
-  folded_history ch_t[2][NHIST];
+  history_t phr;
   bentry *btable;
   gentry *gtable[NHIST];
-// used for storing the history lengths
-  int m[NHIST];
+
 
 	perf::base_col_ctr *b_col_ctrs[2];
 	size_t dir_flips = 0;
 	perf::collision_ctr *g_col_ctrs[NHIST];
   PREDICTOR ()
   {
-    int STORAGESIZE = 0;
-
-    ghist = 0;
-    // computes the geometric history lengths   
-    m[0] = MAXHIST - 1;
-    m[NHIST - 1] = MINHIST;
-    for (int i = 1; i < NHIST - 1; i++)
-      {
-	m[NHIST - 1 - i] =
-	  (int) (((double) MINHIST *
-		  pow ((double) (MAXHIST - 1) / (double) MINHIST,
-		       (double) (i) / (double) ((NHIST - 1)))) + 0.5);
-
-
-      }
-
-    fprintf (stdout, "History Series:");
-    STORAGESIZE = 0;
-
-
-    for (int i = NHIST - 1; i >= 0; i--)
-      {
-
-	fprintf (stdout, "%d ", m[i]);
-
-
-	ch_i[i].init (m[i], (LOGG));
-	STORAGESIZE += (1 << LOGG) * (CBITS + UBITS + TBITS /*- ((i + (NHIST & 1)) / 2)*/);
-      }
-    fprintf (stdout, "\n");
-  	STORAGESIZE += (1 << LOGB) + (1 << (LOGB - HYSTSHIFT));
-#ifdef PRINTSIZE
-  	fprintf (stderr,
-		   "(NHIST= %d; MINHIST= %d; MAXHIST= %d; STORAGESIZE= %d bits)\n",
-		   NHIST, MINHIST, MAXHIST - 1, STORAGESIZE);
-#endif
-#ifdef PRINT_SIZE
-    printf("Testing TAGE2006 CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
-#else
-  	printf("Testing TAGE2006 CBP\n");
-#endif
-
-    for (int i = 0; i < NHIST; i++)
-      {
-	ch_t[0][i].init (ch_i[i].OLENGTH, TBITS /*- ((i + (NHIST & 1)) / 2)*/);
-	ch_t[1][i].init (ch_i[i].OLENGTH,
-			 TBITS /*- ((i + (NHIST & 1)) / 2)*/ - 1);
-      }
+    phr = 0;
 
     btable = new bentry[1 << LOGB];
     for (int i = 0; i < NHIST; i++)
       {
-	gtable[i] = new gentry[1 << (LOGG)];
+	gtable[i] = new gentry[1 << (LOGG + LOGASSOC)];
       }
 
   	for (auto &b_col_ctr : b_col_ctrs) {
   		b_col_ctr = new perf::base_col_ctr(1 << LOGB);
   	}
   	for (auto &g_col_ctr : g_col_ctrs) {
-  		g_col_ctr = new perf::collision_ctr(1, 1 << LOGG);
+  		g_col_ctr = new perf::collision_ctr(ASSOC, 1 << LOGG);
   	}
   }
 
 	void setup() {
+  	int STORAGESIZE = 0;
+
+
+  	for (int i = NHIST - 1; i >= 0; i--)
+  	{
+  		STORAGESIZE += (1 << LOGG) * (CBITS + UBITS + TBITS) * ASSOC;
+  	}
+  	STORAGESIZE += (1 << LOGB) + (1 << (LOGB - HYSTSHIFT));
+#ifdef PRINT_SIZE
+  	printf("Testing Intel Skylake CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
+#else
+  	printf("Testing Intel Skylake CBP\n");
+#endif
   }
 
 	void terminate() {
@@ -319,47 +292,20 @@ public:
   int GI[NHIST];
   int BI;
 
-// index function for the global tables: 
-// includes path history as in the OGEHL predictor
-//F serves to mix path history
-  int F (int A, int size, int bank)
-  {
-    int A1, A2;
-
-    A = A & ((1 << size) - 1);
-    A1 = (A & ((1 << LOGG) - 1));
-    A2 = (A >> LOGG);
-    A2 = ((A2 << bank) & ((1 << LOGG) - 1)) + (A2 >> (LOGG - bank));
-    A = A1 ^ A2;
-    A = ((A << bank) & ((1 << LOGG) - 1)) + (A >> (LOGG - bank));
-    return (A);
-  }
-  int gindex (address_t pc, int bank)
-  {
-    int index;
-    if (m[bank] >= 16)
-      index =
-	pc ^ (pc >> ((LOGG - (NHIST - bank - 1)))) ^ ch_i[bank].
-	comp ^ F (phist, 16, bank);
-
-    else
-      index =
-	pc ^ (pc >> (LOGG - NHIST + bank + 1)) ^
-	ch_i[bank].comp ^ F (phist, m[bank], bank);
-
-
-
-    return (index & ((1 << (LOGG)) - 1));
-
+	int gindex (address_t pc, int bank) const
+	{
+		static_assert(sizeof(int) * CHAR_BIT >= LOGG);
+		const auto fold = fold_history<int>(phr, LOGG, bank);
+		const int idx = static_cast<int>(static_cast<int64_t>(pc)) ^ fold;
+		return (idx & ((1 << LOGG) - 1));
   }
 
   //  tag computation
-  uint16_t gtag (address_t pc, int bank)
+  uint16_t gtag (address_t pc, const int bank) const
   {
-
-    int tag = pc ^ ch_t[0][bank].comp ^ (ch_t[1][bank].comp << 1);
-    return (tag & ((1 << (TBITS /*- ((bank + (NHIST & 1)) / 2)*/)) - 1));
-//does not use the same length for all the components
+		static_assert(sizeof(uint16_t) * CHAR_BIT >= TBITS);
+		const auto fold = fold_history<uint16_t>(phr, TBITS, bank);
+		return ((pc ^ fold) & ((1 << TBITS) - 1));
   }
 
 
@@ -383,10 +329,13 @@ public:
 	  }
       }
   }
+	int bank;
+	int way;
   int altbank;
+	int altway;
   // prediction given by longest matching global history
 // altpred contains the alternate prediction
-  bool read_prediction (address_t pc, int &bank, bool & altpred)
+  bool read_prediction (address_t pc, bool & altpred)
   {
 
     bank = NHIST;
@@ -396,35 +345,41 @@ public:
     {
       for (int i = 0; i < NHIST; i++)
 	{
-	  if (gtable[i][GI[i]].tag == gtag (pc, i))
-	    {
-	      bank = i;
-	      break;
-	    }
+      	for (int j = 0; j < ASSOC; j++) {
+      		if (gtable[i][GI[i] + j].tag == gtag (pc, i))
+      		{
+      			bank = i;
+      			way = j;
+      			break;
+      		}
+      	}
 	}
       for (int i = bank + 1; i < NHIST; i++)
 	{
-	  if (gtable[i][GI[i]].tag == gtag (pc, i))
-	    {
-	      altbank = i;
-	      break;
-	    }
+      	for (int j = 0; j < ASSOC; j++) {
+      		if (gtable[i][GI[i] + j].tag == gtag (pc, i))
+      		{
+      			altbank = i;
+      			altway = j;
+      			break;
+      		}
+      	}
 	}
       if (bank < NHIST)
 	{
 	  if (altbank < NHIST)
-	    altpred = (gtable[altbank][GI[altbank]].ctr >= 0);
+	    altpred = (gtable[altbank][GI[altbank] + altway].ctr >= 0);
 	  else
 	    altpred = getbim (pc);
-//if the entry is recognized as a newly allocated entry and 
+//if the entry is recognized as a newly allocated entry and
 //counter PWIN is negative use the alternate prediction
 // see section 3.2.4
-	  if ((PWIN < 0) || (abs (2 * gtable[bank][GI[bank]].ctr + 1) != 1)
-	      || (gtable[bank][GI[bank]].ubit != 0))
+	  // if ((PWIN < 0) || (abs (2 * gtable[bank][GI[bank] + way].ctr + 1) != 1)
+	  //     || (gtable[bank][GI[bank] + way].ubit != 0))
 
-	    return (gtable[bank][GI[bank]].ctr >= 0);
-	  else
-	    return (altpred);
+	    return (gtable[bank][GI[bank] + way].ctr >= 0);
+	  // else
+	  //   return (altpred);
 
 	}
       else
@@ -439,15 +394,14 @@ public:
 
   // PREDICTION
   bool pred_taken, alttaken;
-  int bank;
   bool get_prediction (const address_t pc)
   {
 // computes the table addresses
 	for (int i = 0; i < NHIST; i++)
-	  GI[i] = gindex (pc, i);
+	  GI[i] = gindex (pc, i) * ASSOC;
 	BI = bindex (pc);
 
-	pred_taken = read_prediction (pc, bank, alttaken);
+	pred_taken = read_prediction (pc, alttaken);
 // bank contains the number of the matching table, NHIST if no match
 // pred_taken is the prediction
 // alttaken is the alternate prediction
@@ -532,12 +486,13 @@ public:
 	    case InstClass::callIndirectInstClass:
 	    case InstClass::ReturnInstClass:
   			is_conditional = false;
+  			assert(taken);
 		    break;
   		default:
   			assert(false);
     }
 
-    int NRAND = MYRANDOM ();
+    // int NRAND = MYRANDOM ();
 
     if (is_conditional)
       {
@@ -546,38 +501,38 @@ public:
 	bool ALLOC = ((pred_taken != taken) & (bank > 0));
 
 
-	if (bank < NHIST)
-	  {
-	    bool loctaken = (gtable[bank][GI[bank]].ctr >= 0);
-	    bool PseudoNewAlloc =
-	      (abs (2 * gtable[bank][GI[bank]].ctr + 1) == 1)
-	      && (gtable[bank][GI[bank]].ubit == 0);
-// is entry "pseudo-new allocated" 
-
-	    if (PseudoNewAlloc)
-	      {
-
-		if (loctaken == taken)
-		  ALLOC = false;
-// if the provider component  was delivering the correct prediction; no need to allocate a new entry
-//even if the overall prediction was false
-
-
-//see section 3.2.4
-		if (loctaken != alttaken)
-		  {
-		    if (alttaken == taken)
-		      {
-
-			if (PWIN < 7)
-			  PWIN++;
-		      }
-
-		    else if (PWIN > -8)
-		      PWIN--;
-		  }
-	      }
-	  }
+// 	if (bank < NHIST)
+// 	  {
+// 	    bool loctaken = (gtable[bank][GI[bank] + way].ctr >= 0);
+// 	    bool PseudoNewAlloc =
+// 	      (abs (2 * gtable[bank][GI[bank] + way].ctr + 1) == 1)
+// 	      && (gtable[bank][GI[bank] + way].ubit == 0);
+// // is entry "pseudo-new allocated"
+//
+// 	    if (PseudoNewAlloc)
+// 	      {
+//
+// 		if (loctaken == taken)
+// 		  ALLOC = false;
+// // if the provider component  was delivering the correct prediction; no need to allocate a new entry
+// //even if the overall prediction was false
+//
+//
+// //see section 3.2.4
+// 		if (loctaken != alttaken)
+// 		  {
+// 		    if (alttaken == taken)
+// 		      {
+//
+// 			if (PWIN < 7)
+// 			  PWIN++;
+// 		      }
+//
+// 		    else if (PWIN > -8)
+// 		      PWIN--;
+// 		  }
+// 	      }
+// 	  }
 
 
 
@@ -590,9 +545,10 @@ public:
 	    int8_t min = 3;
 	    for (int i = 0; i < bank; i++)
 	      {
-		if (gtable[i][GI[i]].ubit < min)
-		  min = gtable[i][GI[i]].ubit;
-
+	    	for (int j = 0; j < ASSOC; j++) {
+	    		if (gtable[i][GI[i] + j].ubit < min)
+	    			min = gtable[i][GI[i] + j].ubit;
+	    	}
 	      }
 
 	    if (min > 0)
@@ -601,7 +557,9 @@ public:
 //NO UNUSEFUL ENTRY TO ALLOCATE: age all possible targets, but do not allocate
 		for (int i = bank - 1; i >= 0; i--)
 		  {
-		    gtable[i][GI[i]].ubit--;
+			for (int j = 0; j < ASSOC; j++) {
+				gtable[i][GI[i] + j].ubit--;
+			}
 
 		  }
 
@@ -610,32 +568,34 @@ public:
 	    else
 	      {
 //YES: allocate one entry, but apply some randomness
-// bank I is twice more probable than bank I-1     
+// bank I is twice more probable than bank I-1
 
 
-		int Y = NRAND & ((1 << (bank - 1)) - 1);
+		// int Y = NRAND & ((1 << (bank - 1)) - 1);
 		int X = bank - 1;
-		while ((Y & 1) != 0)
-		  {
-		    X--;
-		    Y >>= 1;
-
-		  }
+		// while ((Y & 1) != 0)
+		//   {
+		//     X--;
+		//     Y >>= 1;
+		//
+		//   }
 
 
 		for (int i = X; i >= 0; i--)
 
 		  {
 		    int T = i;
-		    if ((gtable[T][GI[T]].ubit == min))
-		      {
+			for (int j = 0; j < ASSOC; j++) {
+				if (gtable[T][GI[T] + j].ubit == min)
+				{
 
-			gtable[T][GI[T]].tag = gtag (pc, T);
-			gtable[T][GI[T]].ctr = (taken) ? 0 : -1;
-			gtable[T][GI[T]].ubit = 0;
-		    g_col_ctrs[T]->insert(pc, GI[T]);
-			break;
-		      }
+					gtable[T][GI[T] + j].tag = gtag (pc, T);
+					gtable[T][GI[T] + j].ctr = (taken) ? 0 : -1;
+					gtable[T][GI[T] + j].ubit = 0;
+					g_col_ctrs[T]->insert(pc, GI[T]);
+					break;
+				}
+			}
 		  }
 
 	      }
@@ -651,7 +611,7 @@ public:
 	    if ((X & 1) == 0)
 	      X = 2;
 	    for (int i = 0; i < NHIST; i++)
-	      for (int j = 0; j < (1 << LOGG); j++)
+	      for (int j = 0; j < (1 << (LOGG + LOGASSOC)); j++)
 		gtable[i][j].ubit = gtable[i][j].ubit & X;
 
 	  }
@@ -660,7 +620,7 @@ public:
 	if (bank < NHIST)
 	  {
 
-	    ctrupdate (gtable[bank][GI[bank]].ctr, taken, CBITS);
+	    ctrupdate (gtable[bank][GI[bank] + way].ctr, taken, CBITS);
 	  }
 	else
 	  {
@@ -676,42 +636,53 @@ public:
 	    if (pred_taken == taken)
 	      {
 
-		if (gtable[bank][GI[bank]].ubit < ((1 << UBITS) - 1))
-		  gtable[bank][GI[bank]].ubit++;
+		if (gtable[bank][GI[bank] + way].ubit < ((1 << UBITS) - 1))
+		  gtable[bank][GI[bank] + way].ubit++;
 
 	      }
 	    else
 	      {
-		if (gtable[bank][GI[bank]].ubit > 0)
-		  gtable[bank][GI[bank]].ubit--;
+		if (gtable[bank][GI[bank] + way].ubit > 0)
+		  gtable[bank][GI[bank] + way].ubit--;
 	      }
 
 	  }
 
       }
 // update global history and cyclic shift registers
-//use also history on unconditional branches as for OGEHL predictors.    
+//use also history on unconditional branches as for OGEHL predictors.
 
 
 
 
-    ghist = (ghist << 1);
-    if ((!is_conditional) | (taken))
-      ghist |= (history_t) 1;
+  	if (!is_conditional | taken) {
+  		phr = (phr << 2);
+  		const std::bitset<sizeof(address_t) * CHAR_BIT> b{pc};
+  		const std::bitset<sizeof(address_t) * CHAR_BIT> t{nextPC};
 
-    phist = (phist << 1) + (pc & 1);
-    phist = (phist & ((1 << 16) - 1));
-    for (int i = 0; i < NHIST; i++)
-      {
-	ch_i[i].update (ghist);
-	ch_t[0][i].update (ghist);
-	ch_t[1][i].update (ghist);
-      }
+#define PUSH_BIT(bit) { footprint <<= 1; footprint |= bit; }
+  		uint16_t footprint = 0;
+  		PUSH_BIT(b[18]);
+  		PUSH_BIT(b[17]);
+  		PUSH_BIT(b[16]);
+  		PUSH_BIT(b[15]);
+  		PUSH_BIT(b[14]);
+  		PUSH_BIT(b[13]);
+  		PUSH_BIT(b[10]);
+  		PUSH_BIT(b[9]);
+  		PUSH_BIT(b[6]);
+  		PUSH_BIT(b[5]);
+  		PUSH_BIT(b[12] ^ t[5]);
+  		PUSH_BIT(b[11] ^ t[4]);
+  		PUSH_BIT(b[8] ^ t[3]);
+  		PUSH_BIT(b[7] ^ t[2]);
+  		PUSH_BIT(b[4] ^ t[1]);
+  		PUSH_BIT(b[3] ^ t[0]);
+#undef PUSH_BIT
 
-
-
-
-
+  		phr ^= footprint;
+  		phr |= 1;
+  	}
   }
 
 };
