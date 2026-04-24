@@ -11,6 +11,11 @@ static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef SKYLAKE
+#include "skylake.h"
+static intel_new::SkylakeCBP cond_predictor_impl;
+#endif
+
+#ifdef SKYLAKETAGEBASED
 // #include "impls/intel/skylake.h"
 // static intel::SkylakeCBP cond_predictor_impl;
 #include "skylake.h"

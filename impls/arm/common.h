@@ -31,13 +31,13 @@ namespace arm::common {
         }
 
         [[nodiscard]] bool predict(const uint64_t PC) const {
-            return dir[(PC >> 2) & (SIZE - 1)];
+            return dir[index(PC)];
         }
 
         void update(const uint64_t PC, const bool correct) {
             constexpr uint8_t HYST_MAX = (1 << HYST_WIDTH) - 1;
-            const size_t dir_idx = (PC >> 2) & (SIZE - 1);
-            const size_t hyst_idx = (PC >> 2) & (HYST_SIZE - 1);
+            const size_t dir_idx = index(PC);
+            const size_t hyst_idx = dir_idx >> LOG_HYST_SHARE;
             dir_col_ctr.insert(PC, dir_idx);
             // ReSharper disable once CppDFAUnreachableCode
             if constexpr (LOG_HYST_SHARE > 0) {
@@ -80,6 +80,10 @@ namespace arm::common {
         static constexpr size_t HYST_SIZE = 1 << (LOG_SIZE - LOG_HYST_SHARE);
         static constexpr size_t HYST_WIDTH = ENTRY_WIDTH - 1;
         static_assert(HYST_WIDTH <= sizeof(uint8_t) * CHAR_BIT);
+
+        [[nodiscard]] static size_t index(const uint64_t pc) {
+            return (pc >> 2) & (SIZE - 1);
+        }
 
         std::array<bool, SIZE> dir;
         std::array<uint8_t, HYST_SIZE> hyst;
