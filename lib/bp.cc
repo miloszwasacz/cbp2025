@@ -225,7 +225,7 @@ void bp_t::output(const uint64_t num_inst)
    //const uint64_t meas_cycles_on_wrong_path = std::accumulate(meas_cycles_on_wrong_path_per_epoch.begin(), meas_cycles_on_wrong_path_per_epoch.end(), 0);
 
    //uint64_t num_misp = (meas_conddir_m + meas_jumpind_m + meas_jumpret_m + meas_notctrl_m);
-   printf("\n-----------------------------------------------BRANCH PREDICTION MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)----------------------------------------------\n");
+   printf("\n--------------------------------------------BRANCH PREDICTION MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)--------------------------------------------\n");
    printf("Type                   NumBr     MispBr        mr     mpki\n");
    //BP_OUTPUT("All              ", num_inst, num_misp, num_inst);
    BP_OUTPUT("CondDirect       ", meas_conddir_n, meas_conddir_m, num_inst);
@@ -233,7 +233,7 @@ void bp_t::output(const uint64_t num_inst)
    BP_OUTPUT("JumpIndirect     ", meas_jumpind_n, meas_jumpind_m, num_inst);
    BP_OUTPUT("JumpReturn       ", meas_jumpret_n, meas_jumpret_m, num_inst);
    BP_OUTPUT("Not control      ", meas_notctrl_n, meas_notctrl_m, num_inst);
-   printf("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+   printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
 }
 
 void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch, const std::vector<uint64_t>&num_cycles_per_epoch)
@@ -242,7 +242,7 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
 
    {
       const uint64_t target_instr_count = 10000000;
-      printf("\n------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Last 10M instructions)-----------------------------------------------------\n");
+      printf("\n---------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Last 10M instructions)---------------------------------------------------\n");
       printf("       Instr       Cycles      IPC      NumBr     MispBr BrPerCyc MispBrPerCyc        MR     MPKI      CycWP   CycWPAvg   CycWPPKI\n");
       uint64_t my_instr_count = 0;
       uint64_t my_cycle_count = 0;
@@ -264,12 +264,12 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
       const double cyc_wp_avg =  (my_br_mispred_count == 0) ? 0.00 : (double)my_wpc_count/(double)my_br_mispred_count;
       const double cyc_wp_pki =  (double)my_wpc_count*1000/(double)my_instr_count;
       printf("%12ld %12ld %8.4f %10ld %10ld %8.4lf %12.4lf %8.4lf%% %8.4lf %10ld %10.4lf %10.4lf\n", my_instr_count, my_cycle_count, (double)my_instr_count/(double)my_cycle_count, my_br_count, my_br_mispred_count, (double)(my_br_count)/(double)(my_cycle_count), (double)(my_br_mispred_count)/(double)(my_cycle_count), 100.0*((double)(my_br_mispred_count)/(double)(my_br_count)), 1000.0*((double)(my_br_mispred_count)/(double)(my_instr_count)), my_wpc_count, cyc_wp_avg, cyc_wp_pki);
-      printf("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
    }
 
    {
       const uint64_t target_instr_count = 25000000;
-      printf("\n------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Last 25M instructions)-----------------------------------------------------\n");
+      printf("\n---------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Last 25M instructions)---------------------------------------------------\n");
       printf("       Instr       Cycles      IPC      NumBr     MispBr BrPerCyc MispBrPerCyc        MR     MPKI      CycWP   CycWPAvg   CycWPPKI\n");
       uint64_t my_instr_count = 0;
       uint64_t my_cycle_count = 0;
@@ -291,13 +291,13 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
       const double cyc_wp_avg =  (my_br_mispred_count == 0) ? 0.00 : (double)my_wpc_count/(double)my_br_mispred_count;
       const double cyc_wp_pki =  (double)my_wpc_count*1000/(double)my_instr_count;
       printf("%12ld %12ld %8.4f %10ld %10ld %8.4lf %12.4lf %8.4lf%% %8.4lf %10ld %10.4lf %10.4lf\n", my_instr_count, my_cycle_count, (double)my_instr_count/(double)my_cycle_count, my_br_count, my_br_mispred_count, (double)(my_br_count)/(double)(my_cycle_count), (double)(my_br_mispred_count)/(double)(my_cycle_count), 100.0*((double)(my_br_mispred_count)/(double)(my_br_count)), 1000.0*((double)(my_br_mispred_count)/(double)(my_instr_count)), my_wpc_count, cyc_wp_avg, cyc_wp_pki);
-      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
    }
 
    const uint64_t total_instr = std::accumulate(num_insts_per_epoch.begin(), num_insts_per_epoch.end(), 0); // # mispredicted jumps, return
    {
       const uint64_t target_instr_count = total_instr/2;
-      printf("\n---------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (50 Perc instructions)---------------------------------------------------\n");
+      printf("\n------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (50 Perc instructions)-------------------------------------------------\n");
       printf("       Instr       Cycles      IPC      NumBr     MispBr BrPerCyc MispBrPerCyc        MR     MPKI      CycWP   CycWPAvg   CycWPPKI\n");
       uint64_t my_instr_count = 0;
       uint64_t my_cycle_count = 0;
@@ -319,13 +319,13 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
       const double cyc_wp_avg =  (my_br_mispred_count == 0) ? 0.00 : (double)my_wpc_count/(double)my_br_mispred_count;
       const double cyc_wp_pki =  (double)my_wpc_count*1000/(double)my_instr_count;
       printf("%12ld %12ld %8.4f %10ld %10ld %8.4lf %12.4lf %8.4lf%% %8.4lf %10ld %10.4lf %10.4lf\n", my_instr_count, my_cycle_count, (double)my_instr_count/(double)my_cycle_count, my_br_count, my_br_mispred_count, (double)(my_br_count)/(double)(my_cycle_count), (double)(my_br_mispred_count)/(double)(my_cycle_count), 100.0*((double)(my_br_mispred_count)/(double)(my_br_count)), 1000.0*((double)(my_br_mispred_count)/(double)(my_instr_count)), my_wpc_count, cyc_wp_avg, cyc_wp_pki);
-      printf("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
    }
 
    {
       const uint64_t total_instr = std::accumulate(num_insts_per_epoch.begin(), num_insts_per_epoch.end(), 0);  // # mispredicted jumps, return
       const uint64_t target_instr_count = total_instr;
-      printf("\n-------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)-------------------------------------\n");
+      printf("\n----------------------------------DIRECT CONDITIONAL BRANCH PREDICTION MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)-----------------------------------\n");
       printf("       Instr       Cycles      IPC      NumBr     MispBr BrPerCyc MispBrPerCyc        MR     MPKI      CycWP   CycWPAvg   CycWPPKI\n");
       uint64_t my_instr_count = 0;
       uint64_t my_cycle_count = 0;
@@ -347,14 +347,14 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
       const double cyc_wp_avg =  (my_br_mispred_count == 0) ? 0.00 : (double)my_wpc_count/(double)my_br_mispred_count;
       const double cyc_wp_pki =  (double)my_wpc_count*1000/(double)my_instr_count;
       printf("%12ld %12ld %8.4f %10ld %10ld %8.4lf %12.4lf %8.4lf%% %8.4lf %10ld %10.4lf %10.4lf\n", my_instr_count, my_cycle_count, (double)my_instr_count/(double)my_cycle_count, my_br_count, my_br_mispred_count, (double)(my_br_count)/(double)(my_cycle_count), (double)(my_br_mispred_count)/(double)(my_cycle_count), 100.0*((double)(my_br_mispred_count)/(double)(my_br_count)), 1000.0*((double)(my_br_mispred_count)/(double)(my_instr_count)), my_wpc_count, cyc_wp_avg, cyc_wp_pki);
-      printf("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
    }
 
 
    if(PRINT_PER_EPOCH_STATS)
    {
       printf("EPOCH COUNT  = %lu\n", num_insts_per_epoch.size());
-      printf("\n-------------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION PER EPOCH MEASUREMENTS------------------------------------------------------------\n");
+      printf("\n----------------------------------------------------------DIRECT CONDITIONAL BRANCH PREDICTION PER EPOCH MEASUREMENTS----------------------------------------------------------\n");
       printf("EPOCH       Instr       Cycles      IPC      NumBr     MispBr BrPerCyc MispBrPerCyc        MR     MPKI      CycWP   CycWPAvg   CycWPPKI\n");
       for(uint64_t epoch_index = 0; epoch_index < num_insts_per_epoch.size(); epoch_index++)
       {
@@ -367,6 +367,6 @@ void bp_t::output_periodic_info(const std::vector<uint64_t>&num_insts_per_epoch,
            const double cyc_wp_pki =  (double)my_wpc_count*1000/(double)my_instr_count;
            printf("%5ld %12ld %12ld %8.4f %10ld %10ld %8.4lf %12.4lf %8.4lf%% %8.4lf %10ld %10.4lf %10.4lf\n", epoch_index, my_instr_count, my_cycle_count, (double)my_instr_count/(double)my_cycle_count, my_br_count, my_br_mispred_count, (double)(my_br_count)/(double)(my_cycle_count), (double)(my_br_mispred_count)/(double)(my_cycle_count), 100.0*((double)(my_br_mispred_count)/(double)(my_br_count)), 1000.0*((double)(my_br_mispred_count)/(double)(my_instr_count)), my_wpc_count, cyc_wp_avg, cyc_wp_pki);
       }
-      printf("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
+      printf("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
    }
 }

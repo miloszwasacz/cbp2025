@@ -23,6 +23,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include <inttypes.h>
+#include <limits>
 
 bool VP_ENABLE = false;
 bool VP_PERFECT = false;
@@ -79,3 +80,6 @@ uint64_t MISP_REDUCTION_PERC = 0;
 
 uint64_t EPOCH_SIZE_INSTS = 1000000;
 bool PRINT_PER_EPOCH_STATS = false;
+
+std::size_t MAX_INSTS_EXEC = std::numeric_limits<std::size_t>::max();
+bool CAP_INSTS_EXEC = false;

@@ -243,6 +243,30 @@ int parseargs(int argc, char ** argv)
            exit(0);
         }
      }
+     else if (!strcmp(argv[i], "-n"))
+     {
+        i++;
+        if (i < argc)
+        {
+           size_t cap;
+           if (sscanf(argv[i], "%lu", &cap) == 1)
+           {
+              MAX_INSTS_EXEC = cap;
+              CAP_INSTS_EXEC = true;
+              i++;
+           }
+           else
+           {
+              printf("Usage: missing executed instruction cap: -n <max_instructions_executed>\n");
+              exit(0);
+           }
+        }
+        else
+        {
+           printf("Usage: missing executed instruction cap: -n <max_instructions_executed>\n");
+           exit(0);
+        }
+     }
      else
      {
         break;
@@ -262,13 +286,14 @@ int parseargs(int argc, char ** argv)
              // "\t[optional: -i to enable perfect indirect-branch prediction]\n"
              "\t[optional: -P to enable stride prefetcher in L1D]\n"
              // "\t[optional: -f <pipeline_fill_latency>]\n"
-             "\t[optional: -M <num_ldst_lanes>\n"
-             "\t[optional: -A <num_alu_lanes>\n"
+             "\t[optional: -M <num_ldst_lanes>]\n"
+             "\t[optional: -A <num_alu_lanes>]\n"
              "\t[optional: -F <fetch_width>,<fetch_num_branch>,<fetch_stop_at_indirect>,<fetch_stop_at_taken>,<fetch_model_icache>]\n"
              "\t[optional: -I <log2_ic_size>,<ic_assoc>,<ic_blocksize>]\n"
              "\t[optional: -D <log2_L1_size>,<L1_assoc>,<L1_blocksize>,<L1_latency>,<log2_L2_size>,<L2_assoc>,<L2_blocksize>,<L2_latency>,<log2_L3_size>,<L3_assoc>,<L3_blocksize>,<L3_latency>,<main_memory_latency>]\n"
              "\t[optional: -w <window_size>]\n"
-             "\t[optional: -E <epoch_size_insts> to enable dumping per-epoch conditional branch info\n"
+             "\t[optional: -E <epoch_size_insts> to enable dumping per-epoch conditional branch info]\n"
+             "\t[optional: -n <max_instructions_executed>\n]"
              "\t[REQUIRED: .gz trace file]\n", argv[0]);
      exit(0);
   }
@@ -299,7 +324,8 @@ int main(int argc, char ** argv)
 
   //bool dump_activity = true;
   //uint64_t current_fetch_cycle = 0;
-  while (inst != nullptr) 
+  size_t n = 0;
+  while ((!CAP_INSTS_EXEC || n < MAX_INSTS_EXEC) && inst != nullptr)
   {
       //const bool logging_activated = (LOG_LEVEL != 0) && (current_fetch_cycle>= LOG_START_CYCLE) && (current_fetch_cycle<=LOG_END_CYCLE);
       //if(logging_activated && dump_activity)
@@ -319,6 +345,7 @@ int main(int argc, char ** argv)
       //current_fetch_cycle = next_fetch_cycle;
       delete inst;
       inst = reader.get_inst();
+      n++;
   }
 
   endPredictor();

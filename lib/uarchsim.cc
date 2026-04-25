@@ -864,45 +864,45 @@ void uarchsim_t::output()
    printf("NUM_LDST_LANES = %lu%s", NUM_LDST_LANES, ((NUM_LDST_LANES > 0) ? "\n" : " (unbounded)\n"));
    printf("NUM_ALU_LANES = %lu%s", NUM_ALU_LANES, ((NUM_ALU_LANES > 0) ? "\n" : " (unbounded)\n"));
    //BP.output();
-   printf("MEMORY HIERARCHY CONFIGURATION---------------------\n");
-   printf("STRIDE Prefetcher = %s\n", PREFETCHER_ENABLE ? "1" : "0");
-   printf("PERFECT_CACHE = %s\n", (PERFECT_CACHE ? "1" : "0"));
-   printf("WRITE_ALLOCATE = %s\n", (WRITE_ALLOCATE ? "1" : "0"));
-   printf("Within-pipeline factors:\n");
-   printf("\tAGEN latency = 1 cycle\n");
-   printf("\tStore Queue (SQ): SQ size = window size, oracle memory disambiguation, store-load forwarding = 1 cycle after store's or load's agen.\n");
-   printf("\t* Note: A store searches the L1$ at commit. The store is released\n");
-   printf("\t* from the SQ and window, whether it hits or misses. Store misses\n");
-   printf("\t* are buffered until the block is allocated and the store is\n");
-   printf("\t* performed in the L1$. While buffered, conflicting loads get\n");
-   printf("\t* the store's data as they would from the SQ.\n");
-   if (FETCH_MODEL_ICACHE) {
-      printf("I$: %lu %s, %lu-way set-assoc., %luB block size\n",
-         SCALED_SIZE(IC_SIZE), SCALED_UNIT(IC_SIZE), IC_ASSOC, IC_BLOCKSIZE);
-   }
-   printf("L1$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
-      SCALED_SIZE(L1_SIZE), SCALED_UNIT(L1_SIZE), L1_ASSOC, L1_BLOCKSIZE, L1_LATENCY);
-   printf("L2$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
-      SCALED_SIZE(L2_SIZE), SCALED_UNIT(L2_SIZE), L2_ASSOC, L2_BLOCKSIZE, L2_LATENCY);
-   printf("L3$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
-      SCALED_SIZE(L3_SIZE), SCALED_UNIT(L3_SIZE), L3_ASSOC, L3_BLOCKSIZE, L3_LATENCY);
-   printf("Main Memory: %lu-cycle fixed search time\n", MAIN_MEMORY_LATENCY);
-   printf("---------------------------STORE QUEUE MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)---------------------------\n");
-   printf("Number of loads: %lu\n", num_load);
-   printf("Number of loads that miss in SQ: %lu (%.2f%%)\n", num_load_sqmiss, 100.0*(double)num_load_sqmiss/(double)num_load);
-   printf("Number of PFs issued to the memory system %lu\n", stat_pfs_issued_to_mem);
-   printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
-   printf("------------------------MEMORY HIERARCHY MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)-------------------------\n");
-   if (FETCH_MODEL_ICACHE) {
-      printf("I$:\n"); IC.stats();
-   }
-   printf("L1$:\n"); L1.stats();
-   printf("L2$:\n"); L2.stats();
-   printf("L3$:\n"); L3.stats();
-   printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
-   printf("----------------------------------------------Prefetcher (Full Simulation i.e. No Warmup)----------------------------------------------\n");
-   prefetcher.print_stats();
-   printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
+   // printf("MEMORY HIERARCHY CONFIGURATION---------------------\n");
+   // printf("STRIDE Prefetcher = %s\n", PREFETCHER_ENABLE ? "1" : "0");
+   // printf("PERFECT_CACHE = %s\n", (PERFECT_CACHE ? "1" : "0"));
+   // printf("WRITE_ALLOCATE = %s\n", (WRITE_ALLOCATE ? "1" : "0"));
+   // printf("Within-pipeline factors:\n");
+   // printf("\tAGEN latency = 1 cycle\n");
+   // printf("\tStore Queue (SQ): SQ size = window size, oracle memory disambiguation, store-load forwarding = 1 cycle after store's or load's agen.\n");
+   // printf("\t* Note: A store searches the L1$ at commit. The store is released\n");
+   // printf("\t* from the SQ and window, whether it hits or misses. Store misses\n");
+   // printf("\t* are buffered until the block is allocated and the store is\n");
+   // printf("\t* performed in the L1$. While buffered, conflicting loads get\n");
+   // printf("\t* the store's data as they would from the SQ.\n");
+   // if (FETCH_MODEL_ICACHE) {
+   //    printf("I$: %lu %s, %lu-way set-assoc., %luB block size\n",
+   //       SCALED_SIZE(IC_SIZE), SCALED_UNIT(IC_SIZE), IC_ASSOC, IC_BLOCKSIZE);
+   // }
+   // printf("L1$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
+   //    SCALED_SIZE(L1_SIZE), SCALED_UNIT(L1_SIZE), L1_ASSOC, L1_BLOCKSIZE, L1_LATENCY);
+   // printf("L2$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
+   //    SCALED_SIZE(L2_SIZE), SCALED_UNIT(L2_SIZE), L2_ASSOC, L2_BLOCKSIZE, L2_LATENCY);
+   // printf("L3$: %lu %s, %lu-way set-assoc., %luB block size, %lu-cycle search latency\n",
+   //    SCALED_SIZE(L3_SIZE), SCALED_UNIT(L3_SIZE), L3_ASSOC, L3_BLOCKSIZE, L3_LATENCY);
+   // printf("Main Memory: %lu-cycle fixed search time\n", MAIN_MEMORY_LATENCY);
+   // printf("---------------------------STORE QUEUE MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)---------------------------\n");
+   // printf("Number of loads: %lu\n", num_load);
+   // printf("Number of loads that miss in SQ: %lu (%.2f%%)\n", num_load_sqmiss, 100.0*(double)num_load_sqmiss/(double)num_load);
+   // printf("Number of PFs issued to the memory system %lu\n", stat_pfs_issued_to_mem);
+   // printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
+   // printf("------------------------MEMORY HIERARCHY MEASUREMENTS (Full Simulation i.e. Counts Not Reset When Warmup Ends)-------------------------\n");
+   // if (FETCH_MODEL_ICACHE) {
+   //    printf("I$:\n"); IC.stats();
+   // }
+   // printf("L1$:\n"); L1.stats();
+   // printf("L2$:\n"); L2.stats();
+   // printf("L3$:\n"); L3.stats();
+   // printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
+   // printf("----------------------------------------------Prefetcher (Full Simulation i.e. No Warmup)----------------------------------------------\n");
+   // prefetcher.print_stats();
+   // printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
    printf("\n-------------------------------ILP LIMIT STUDY (Full Simulation i.e. Counts Not Reset When Warmup Ends)--------------------------------\n");
    printf("instructions = %lu\n", num_inst);
    printf("cycles       = %lu\n", cycle);

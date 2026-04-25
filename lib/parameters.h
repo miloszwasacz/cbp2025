@@ -86,4 +86,7 @@ extern uint64_t MISP_REDUCTION_PERC;
 
 extern uint64_t EPOCH_SIZE_INSTS;
 extern bool PRINT_PER_EPOCH_STATS;
+
+extern std::size_t MAX_INSTS_EXEC;
+extern bool CAP_INSTS_EXEC;
 #endif
