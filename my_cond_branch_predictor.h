@@ -12,22 +12,35 @@ static PREDICTOR cond_predictor_impl;
 
 #ifdef SKYLAKE
 #include "skylake.h"
-static intel_new::SkylakeCBP cond_predictor_impl;
-#endif
-
-#ifdef SKYLAKETAGEBASED
-// #include "impls/intel/skylake.h"
-// static intel::SkylakeCBP cond_predictor_impl;
-#include "skylake.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
+#ifdef SKYLAKECUSTOM
+#include "skylake_firestorm_based.h"
+static intel_new::SkylakeCBP cond_predictor_impl;
+#endif
+
+#ifdef SKYLAKECUSTOMOLD
+#include "impls/intel/skylake.h"
+static intel::SkylakeCBP cond_predictor_impl;
+#endif
+
 #ifdef FIRESTORM
+#include "firestorm.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
+#ifdef FIRESTORMCUSTOM
 #include "impls/firestorm.h"
 static apple::FirestormCBP cond_predictor_impl;
 #endif
 
 #ifdef ORYON
+#include "oryon.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
+#ifdef ORYONCUSTOM
 #include "impls/oryon.h"
 static qualcomm::OryonCBP cond_predictor_impl;
 #endif

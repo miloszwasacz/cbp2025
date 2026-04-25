@@ -66,17 +66,15 @@
 //  (16,4) and (8,8) seems good design points
 
 
-#define NHIST 12	//12  different history lengths, but 6 physical tables
+#define NHIST 14	//14  different history lengths, but 7 physical tables
 
 #define UWIDTH 1
 #define LOGASSOC 0// associative tagged tables are probably  not worth the effort at TBITS=12 : about 0.02 MPKI gain for associativity 2; an extra tag bit would be  needed to get some gain with associativity 4 // but partial skewed associativity (option PSK) might be interesting
-#define TBITS 14 	// if 11 bits: benefit from associativity vanishes
+#define TBITS 11 	// if 11 bits: benefit from associativity vanishes
 
 #define LOGG (LOGT-LOGASSOC) // size of way in a logical TAGE table
 #define ASSOC (1<<LOGASSOC)
 
-// #define HYSTSHIFT 1 // bimodal hysteresis shared among (1<< HYSTSHIFT) entries
-// #define BIMWIDTH 3  //  with of the counter in the bimodal predictor
 #define HYSTSHIFT 0
 #define BIMWIDTH 2
 //A. Seznec: I just played using 3-bit counters in the simulator, using 2-bit counters but HYSTSHIFT=0 brings similar accuracy
@@ -94,17 +92,18 @@ int BANK1;
 
 /////////////////////////////////////////////////
 // the replacement/allocation policies described in the slide set
-#define OPTTAGE
+// #define OPTTAGE
 #ifdef OPTTAGE
 #ifndef INTERLEAVED
-// #define ADJACENTTABLE 1		// ~+0.076,  if 14 tables :7 physical tables: Logical table T(2i-1) and T(2i) are mapped on the the same physical P(i), but the two predictions are adjacent and  are read with index computed with H(2i-1), the tags are respectively computed with  for H(2i-1) and H(2i).
-// #define SHARED 1		// (T1/T9) (T2/T10)   shared the same bank T9 and T10 do not share with anybody: ~ -0.076 MPKI
-#define SHARED 0
+#define ADJACENTTABLE 1		// ~+0.076,  if 14 tables :7 physical tables: Logical table T(2i-1) and T(2i) are mapped on the the same physical P(i), but the two predictions are adjacent and  are read with index computed with H(2i-1), the tags are respectively computed with  for H(2i-1) and H(2i).
+#define SHARED 1		// (T1/T9) (T2/T10)   shared the same bank T9 and T10 do not share with anybody: ~ -0.076 MPKI
 #endif
 #define OPTGEOHIST // we can do better than geometric series
 // Optimizations  allocation/replacement: globally; ~0.09
 #define FILTERALLOCATION 1	// ~ -0.04 MPKI
+#if UWIDTH > 1
 #define FORCEU 1  //don't work if only one U  bit	// from times selective allocation with u = 1: ~0.015 MPKI
+#endif
 
 #if (LOGASSOC==1)
 // A. Seznec: partial skewed associativity, remmeber that I invented it in 1993 :-)
@@ -123,6 +122,7 @@ int BANK1;
 #define SHARED 0
 #define PSK 0
 #define REPSK 0
+#define OPTGEOHIST
 #endif
 //////////////////////////////////////////////
 
@@ -256,7 +256,7 @@ bool pred_inter;
 
 ////  FOR TAGE //////
 
-#define HISTBUFFERLENGTH 128	// we use a 4K entries history buffer to store the branch history
+#define HISTBUFFERLENGTH 4096	// we use a 4K entries history buffer to store the branch history
 
 
 
@@ -1631,7 +1631,9 @@ public:
                                                   gtable[i][IREP[j]].tag=   gtable[i][GGI[j][i] + j].tag ;
                                                   gtable[i][IREP[j]].ctr = gtable[i][GGI[j][i] + j].ctr;
 
-
+                                                  //TODO The entry is moved so the collision counters should also move it
+                                             } else {
+                                                  g_col_ctrs[i]->insert(PCBRANCH, GGI[j][i] + j);
                                              }
 
 
@@ -1644,8 +1646,6 @@ public:
                                              gtable[i][GGI[j][i] + j].u =  ((UWIDTH ==2) || (TICKH >= BORNTICK/2)) & (First ? 1: 0);
 #endif
                                              gtable[i][GGI[j][i] + j].ctr = (resolveDir) ? 0 : -1;
-
-                                             g_col_ctrs[i]->insert(PCBRANCH, GGI[j][i] + j);
 
 
 

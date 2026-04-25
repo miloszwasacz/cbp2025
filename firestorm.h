@@ -22,13 +22,13 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 
 #define LOGB 13
 #define HYSTSHIFT 0
-#define NHIST 3
-#define CBITS 3
-#define TBITS 13
-#define UBITS 2
-#define LOGG 9
-#define LOGASSOC 2
-#define ASSOC (1 << LOGASSOC)
+#define NHIST 6
+#define CBITS 2
+#define TBITS 16
+#define UBITS 1
+// #define LOGG 11
+// #define LOGASSOC 2
+// #define ASSOC (1 << LOGASSOC)
 
 #define ASSERT(cond) if (!(cond)) {printf("assert line %d\n",__LINE__); exit(EXIT_FAILURE);}
 
@@ -88,66 +88,17 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 #endif
 
 
-#define MAXHIST (93 * 2)
-
-
 using namespace std;
+#undef LOGG
+#undef LOGASSOC
+#undef ASSOC
 
 
 typedef uint64_t address_t;
-typedef bitset<MAXHIST> history_t;
+typedef bitset<100> phrt_t;
+typedef bitset<28> phrb_t;
 
 // all the predictor is there
-
-template<typename fold_t>
-fold_t fold_history(const history_t &hist, const int fold_len, const int bank) {
-    assert(fold_len <= sizeof(fold_t) * CHAR_BIT && fold_len > 0);
-    int max_i, min_i, max_j, min_j;
-    switch (bank) {
-        case 0:
-            max_i = 16 * 11 + 8;
-            min_i = 16 * 1 - 6;
-            max_j = 16 * 11 + 1;
-            min_j = 1;
-            break;
-        case 1:
-            max_i = 16 * 3 + 8;
-            min_i = 16 * 1 - 6;
-            max_j = 16 * 3 + 1;
-            min_j = 1;
-            break;
-        case 2:
-            max_i = 20;
-            min_i = 6;
-            max_j = 15;
-            min_j = 1;
-            break;
-        default:
-            assert(false);
-    }
-
-    fold_t fold = 0;
-
-    int i = max_i;
-    int j = max_j;
-    while (j >= min_j || i >= min_i) {
-        fold_t tmp_fold = 0;
-        for (int b = fold_len - 1; b >= 0; --b) {
-            tmp_fold <<= 1;
-            if (i >= min_i) {
-                tmp_fold ^= hist[i];
-                i -= 2;
-            }
-            if (j >= min_j) {
-                tmp_fold ^= hist[j];
-                j -= 2;
-            }
-        }
-        fold ^= tmp_fold;
-    }
-
-    return fold;
-}
 
 class PREDICTOR {
 public:
@@ -198,9 +149,12 @@ public:
     // valid or not for delivering  the prediction
     int TICK;
     // use a path history as for the OGEHL predictor
-    history_t phr;
+    phrt_t phrt;
+    phrb_t phrb;
     bentry *btable;
     gentry *gtable[NHIST];
+    size_t logg[NHIST] = {10, 10, 10, 11, 11, 11};
+    size_t assoc[NHIST] = {4, 4, 4, 4, 6, 6};
 
 
     perf::base_col_ctr *b_col_ctrs[2];
@@ -208,18 +162,19 @@ public:
     perf::collision_ctr *g_col_ctrs[NHIST];
 
     PREDICTOR() {
-        phr = 0;
+        phrt = 0;
+        phrb = 0;
 
         btable = new bentry[1 << LOGB];
         for (int i = 0; i < NHIST; i++) {
-            gtable[i] = new gentry[1 << (LOGG + LOGASSOC)];
+            gtable[i] = new gentry[(1 << logg[i]) * assoc[i]];
         }
 
         for (auto &b_col_ctr: b_col_ctrs) {
             b_col_ctr = new perf::base_col_ctr(1 << LOGB);
         }
-        for (auto &g_col_ctr: g_col_ctrs) {
-            g_col_ctr = new perf::collision_ctr(ASSOC, 1 << LOGG);
+        for (size_t i = 0; i < NHIST; i++) {
+            g_col_ctrs[i] = new perf::collision_ctr(assoc[i], 1 << logg[i]);
         }
     }
 
@@ -228,13 +183,13 @@ public:
 
 
         for (int i = NHIST - 1; i >= 0; i--) {
-            STORAGESIZE += (1 << LOGG) * (CBITS + UBITS + TBITS) * ASSOC;
+            STORAGESIZE += (1 << logg[i]) * (CBITS + UBITS + TBITS) * assoc[i];
         }
         STORAGESIZE += (1 << LOGB) + (1 << (LOGB - HYSTSHIFT));
 #ifdef PRINT_SIZE
-        printf("Testing Intel Skylake CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
+        printf("Testing Apple Firestorm CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
 #else
-        printf("Testing Intel Skylake CBP\n");
+        printf("Testing Apple Firestorm CBP\n");
 #endif
     }
 
@@ -268,26 +223,245 @@ public:
     // index function for the bimodal table
 
     int bindex(address_t pc) {
-        return (pc & ((1 << (LOGB)) - 1));
+        return ((pc >> 2) & ((1 << (LOGB)) - 1));
     }
 
     // indexes to the different tables are computed only once  and store in GI and BI
     int GI[NHIST];
     int BI;
 
-    int gindex(address_t pc, int bank) const {
-        static_assert(sizeof(int) * CHAR_BIT >= LOGG);
-        const auto fold = fold_history<int>(phr, LOGG - 1, bank);
-        const int pc_bit = static_cast<int>((pc >> 5) & 1) << (LOGG - 1);
-        return (pc_bit | fold) & ((1 << LOGG) - 1);
+#define PUSH_BIT(bit) { fold <<= 1; fold |= bit; }
+
+    int gindex(address_t PC, int bank) const {
+        assert(sizeof(int) * CHAR_BIT >= logg[bank]);
+        const bitset<sizeof(uint64_t) * CHAR_BIT> pc = PC;
+        int fold = 0;
+        switch (bank) {
+            case 0:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrt[53] ^ phrt[58] ^ phrb[0]);
+                PUSH_BIT(phrt[38] ^ phrt[88] ^ pc[9]);
+                PUSH_BIT(phrt[33] ^ phrt[83] ^ phrb[25]);
+                PUSH_BIT(phrt[27] ^ phrt[78] ^ phrb[20]);
+                PUSH_BIT(phrt[22] ^ phrt[73] ^ phrb[15]);
+                PUSH_BIT(phrt[17] ^ phrt[68] ^ phrb[10]);
+                PUSH_BIT(phrt[12] ^ phrt[63] ^ phrb[5]);
+                PUSH_BIT(phrt[7] ^ phrt[48] ^ phrt[99]);
+                PUSH_BIT(phrt[2] ^ phrt[43] ^ phrt[93]);
+                break;
+            case 1:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrt[32] ^ phrb[6] ^ pc[9]);
+                PUSH_BIT(phrt[25] ^ phrt[28] ^ phrb[3]);
+                PUSH_BIT(phrt[21] ^ phrt[56] ^ phrb[0]);
+                PUSH_BIT(phrt[18] ^ phrt[52] ^ phrb[27]);
+                PUSH_BIT(phrt[14] ^ phrt[49] ^ phrb[23]);
+                PUSH_BIT(phrt[11] ^ phrt[45] ^ phrb[20]);
+                PUSH_BIT(phrt[8] ^ phrt[42] ^ phrb[17]);
+                PUSH_BIT(phrt[4] ^ phrt[38] ^ phrb[13]);
+                PUSH_BIT(phrt[1] ^ phrt[35] ^ phrb[10]);
+                break;
+            case 2:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrt[23] ^ phrb[17] ^ pc[11]);
+                PUSH_BIT(phrt[21] ^ phrb[14] ^ pc[8]);
+                PUSH_BIT(phrt[18] ^ phrb[12] ^ phrb[27]);
+                PUSH_BIT(phrt[16] ^ phrb[9] ^ phrb[24]);
+                PUSH_BIT(phrt[13] ^ phrb[7] ^ phrb[22]);
+                PUSH_BIT(phrt[8] ^ phrt[11] ^ phrb[4]);
+                PUSH_BIT(phrt[6] ^ phrt[31] ^ phrb[2]);
+                PUSH_BIT(phrt[3] ^ phrt[28] ^ phrb[0]);
+                PUSH_BIT(phrt[1] ^ phrt[26] ^ phrb[19]);
+                break;
+            case 3:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrt[14] ^ phrb[1] ^ pc[11]);
+                PUSH_BIT(phrt[12] ^ phrb[0] ^ pc[9]);
+                PUSH_BIT(phrt[11] ^ phrb[12] ^ pc[8]);
+                PUSH_BIT(phrt[10] ^ phrb[11] ^ phrb[17]);
+                PUSH_BIT(phrt[8] ^ phrb[9] ^ phrb[16]);
+                PUSH_BIT(phrt[7] ^ phrb[8] ^ phrb[15]);
+                PUSH_BIT(phrt[5] ^ phrb[6] ^ phrb[13]);
+                PUSH_BIT(phrt[3] ^ phrt[4] ^ phrb[5]);
+                PUSH_BIT(phrt[1] ^ phrt[17] ^ phrb[4]);
+                PUSH_BIT(phrt[0] ^ phrt[15] ^ phrb[2]);
+                break;
+            case 4:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrt[10] ^ phrb[4] ^ pc[14]);
+                PUSH_BIT(phrt[9] ^ phrb[3] ^ pc[13]);
+                PUSH_BIT(phrt[8] ^ phrb[2] ^ pc[12]);
+                PUSH_BIT(phrt[7] ^ phrb[1] ^ pc[11]);
+                PUSH_BIT(phrt[6] ^ phrb[0] ^ pc[10]);
+                PUSH_BIT(phrt[5] ^ phrb[9] ^ pc[9]);
+                PUSH_BIT(phrt[4] ^ phrb[8] ^ pc[8]);
+                PUSH_BIT(phrt[3] ^ phrb[7] ^ pc[7]);
+                PUSH_BIT(phrt[2] ^ phrb[6] ^ phrb[10]);
+                PUSH_BIT(phrt[0] ^ phrt[1] ^ phrb[5]);
+                break;
+            case 5:
+                PUSH_BIT(pc[6]);
+                PUSH_BIT(phrb[5] ^ pc[12]);
+                PUSH_BIT(phrb[4] ^ pc[11]);
+                PUSH_BIT(phrb[3] ^ pc[10]);
+                PUSH_BIT(phrb[2] ^ pc[9]);
+                PUSH_BIT(phrb[0] ^ phrb[1] ^ pc[7] ^ pc[8]);
+                PUSH_BIT(phrt[5] ^ pc[19]);
+                PUSH_BIT(phrt[4] ^ pc[18]);
+                PUSH_BIT(phrt[3] ^ pc[17]);
+                PUSH_BIT(phrt[2] ^ pc[16]);
+                PUSH_BIT(phrt[0] ^ phrt[1] ^ pc[14] ^ pc[15]);
+                break;
+            default:
+                assert(false);
+        }
+        return fold;
     }
 
     //  tag computation
-    uint16_t gtag(address_t pc, const int bank) const {
+    uint16_t gtag(address_t PC, const int bank) const {
         static_assert(sizeof(uint16_t) * CHAR_BIT >= TBITS);
-        const auto fold = fold_history<uint16_t>(phr, TBITS, bank);
-        return ((pc ^ fold) & ((1 << TBITS) - 1));
+        const bitset<sizeof(uint64_t) * CHAR_BIT> pc = PC;
+        uint16_t fold = 0;
+        switch (bank) {
+            case 0:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(
+                    pc[18] ^ phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrt[59] ^ phrt[71] ^ phrt[83] ^ phrt[95] ^
+                    phrb[7] ^ phrb[20]);
+                PUSH_BIT(
+                    pc[17] ^ phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrt[58] ^ phrt[70] ^ phrt[82] ^ phrt[94] ^
+                    phrb[6] ^ phrb[19]);
+                PUSH_BIT(
+                    pc[16] ^ phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrt[57] ^ phrt[69] ^ phrt[81] ^ phrt[93] ^ phrb
+                    [5] ^ phrb[18]);
+                PUSH_BIT(
+                    pc[15] ^ phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrt[56] ^ phrt[68] ^ phrt[80] ^ phrt[92] ^ phrb
+                    [4] ^ phrb[17]);
+                PUSH_BIT(
+                    pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrt[55] ^ phrt[67] ^ phrt[79] ^ phrt[91] ^ phrb
+                    [3] ^ phrb[16]);
+                PUSH_BIT(
+                    pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrt[54] ^ phrt[66] ^ phrt[78] ^ phrt[90] ^ phrb
+                    [2] ^ phrb[15]);
+                PUSH_BIT(
+                    pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrt[53] ^ phrt[65] ^ phrt[77] ^ phrt[89] ^ phrb
+                    [1] ^ phrb[14] ^ phrb[27]);
+                PUSH_BIT(
+                    pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrt[52] ^ phrt[64] ^ phrt[76] ^ phrt[88] ^ phrb
+		            [0] ^ phrb[13] ^ phrb[26]);
+                PUSH_BIT(
+                    pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrt[63] ^ phrt[75] ^ phrt[87] ^ phrt
+                    [99] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
+                PUSH_BIT(
+                    pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrt[62] ^ phrt[74] ^ phrt[86] ^ phrt[
+                        98] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
+                PUSH_BIT(
+                    pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrt[61] ^ phrt[73] ^ phrt[85] ^ phrt[
+                        97] ^ phrb[9] ^ phrb[22]);
+                PUSH_BIT(
+                    pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrt[60] ^ phrt[72] ^ phrt[84] ^ phrt[
+                        96] ^ phrb[8] ^ phrb[21]);
+                break;
+            case 1:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(pc[18] ^ phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrb[7] ^ phrb[20]);
+                PUSH_BIT(pc[17] ^ phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrb[6] ^ phrb[19]);
+                PUSH_BIT(pc[16] ^ phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrb[5] ^ phrb[18]);
+                PUSH_BIT(pc[15] ^ phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrt[56] ^ phrb[4] ^ phrb[17]);
+                PUSH_BIT(pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrt[55] ^ phrb[3] ^ phrb[16]);
+                PUSH_BIT(pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrt[54] ^ phrb[2] ^ phrb[15]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrt[53] ^ phrb[1] ^ phrb[14] ^ phrb[27]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrt[52] ^ phrb[0] ^ phrb[13] ^ phrb[26]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrb[9] ^ phrb[22]);
+                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrb[8] ^ phrb[21]);
+                break;
+            case 2:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(pc[18] ^ phrt[11] ^ phrt[23] ^ phrb[7] ^ phrb[20]);
+                PUSH_BIT(pc[17] ^ phrt[10] ^ phrt[22] ^ phrb[6] ^ phrb[19]);
+                PUSH_BIT(pc[16] ^ phrt[9] ^ phrt[21] ^ phrb[5] ^ phrb[18]);
+                PUSH_BIT(pc[15] ^ phrt[8] ^ phrt[20] ^ phrb[4] ^ phrb[17]);
+                PUSH_BIT(pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrb[3] ^ phrb[16]);
+                PUSH_BIT(pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrb[2] ^ phrb[15]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrb[1] ^ phrb[14] ^ phrb[27]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrb[0] ^ phrb[13] ^ phrb[26]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrb[9] ^ phrb[22]);
+                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrb[8] ^ phrb[21]);
+                break;
+            case 3:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(pc[18] ^ phrt[11] ^ phrb[7]);
+                PUSH_BIT(pc[17] ^ phrt[10] ^ phrb[6]);
+                PUSH_BIT(pc[16] ^ phrt[9] ^ phrb[5]);
+                PUSH_BIT(pc[15] ^ phrt[8] ^ phrb[4] ^ phrb[17]);
+                PUSH_BIT(pc[14] ^ phrt[7] ^ phrb[3] ^ phrb[16]);
+                PUSH_BIT(pc[13] ^ phrt[6] ^ phrb[2] ^ phrb[15]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrb[1] ^ phrb[14]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrb[0] ^ phrb[13]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrb[11] ^ phrb[12]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrb[10]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrb[9]);
+                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrb[8]);
+                break;
+            case 4:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(pc[18] ^ phrb[7]);
+                PUSH_BIT(pc[17] ^ phrt[10] ^ phrb[6]);
+                PUSH_BIT(pc[16] ^ phrt[9] ^ phrb[5]);
+                PUSH_BIT(pc[15] ^ phrt[8] ^ phrb[4]);
+                PUSH_BIT(pc[14] ^ phrt[7] ^ phrb[3]);
+                PUSH_BIT(pc[13] ^ phrt[6] ^ phrb[2]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrb[1]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrb[0]);
+                PUSH_BIT(pc[10] ^ phrt[3]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrb[10]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrb[9]);
+                PUSH_BIT(pc[7] ^ phrt[0] ^ phrb[8]);
+                break;
+            case 5:
+                PUSH_BIT(pc[2]);
+                PUSH_BIT(pc[3]);
+                PUSH_BIT(pc[4]);
+                PUSH_BIT(pc[5]);
+                PUSH_BIT(pc[18]);
+                PUSH_BIT(pc[17]);
+                PUSH_BIT(pc[16] ^ phrb[5]);
+                PUSH_BIT(pc[15] ^ phrb[4]);
+                PUSH_BIT(pc[14] ^ phrb[3]);
+                PUSH_BIT(pc[13] ^ phrb[2]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrb[1]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrb[0]);
+                PUSH_BIT(pc[10] ^ phrt[3]);
+                PUSH_BIT(pc[9] ^ phrt[2]);
+                PUSH_BIT(pc[8] ^ phrt[1]);
+                PUSH_BIT(pc[7] ^ phrt[0]);
+                break;
+            default:
+                assert(false);
+        }
+        return fold;
     }
+#undef PUSH_BIT
 
 
     // up-down saturating counter
@@ -316,7 +490,7 @@ public:
 
         {
             for (int i = 0; i < NHIST; i++) {
-                for (int j = 0; j < ASSOC; j++) {
+                for (int j = 0; j < assoc[i]; j++) {
                     if (gtable[i][GI[i] + j].tag == gtag(pc, i)) {
                         bank = i;
                         way = j;
@@ -326,7 +500,7 @@ public:
             }
         l1:
             for (int i = bank + 1; i < NHIST; i++) {
-                for (int j = 0; j < ASSOC; j++) {
+                for (int j = 0; j < assoc[i]; j++) {
                     if (gtable[i][GI[i] + j].tag == gtag(pc, i)) {
                         altbank = i;
                         altway = j;
@@ -363,7 +537,7 @@ public:
     bool get_prediction(const address_t pc) {
         // computes the table addresses
         for (int i = 0; i < NHIST; i++)
-            GI[i] = gindex(pc, i) * ASSOC;
+            GI[i] = gindex(pc, i) * assoc[i];
         BI = bindex(pc);
 
         pred_taken = read_prediction(pc, alttaken);
@@ -489,7 +663,7 @@ public:
                 // is there some "unuseful" entry to allocate
                 int8_t min = 3;
                 for (int i = 0; i < bank; i++) {
-                    for (int j = 0; j < ASSOC; j++) {
+                    for (int j = 0; j < assoc[i]; j++) {
                         if (gtable[i][GI[i] + j].ubit < min)
                             min = gtable[i][GI[i] + j].ubit;
                     }
@@ -498,7 +672,7 @@ public:
                 if (min > 0) {
                     //NO UNUSEFUL ENTRY TO ALLOCATE: age all possible targets, but do not allocate
                     for (int i = bank - 1; i >= 0; i--) {
-                        for (int j = 0; j < ASSOC; j++) {
+                        for (int j = 0; j < assoc[i]; j++) {
                             gtable[i][GI[i] + j].ubit--;
                         }
                     }
@@ -519,7 +693,7 @@ public:
 
                     for (int i = X; i >= 0; i--) {
                         int T = i;
-                        for (int j = 0; j < ASSOC; j++) {
+                        for (int j = 0; j < assoc[i]; j++) {
                             if (gtable[T][GI[T] + j].ubit == min) {
                                 gtable[T][GI[T] + j].tag = gtag(pc, T);
                                 gtable[T][GI[T] + j].ctr = (taken) ? 0 : -1;
@@ -543,7 +717,7 @@ public:
                 if ((X & 1) == 0)
                     X = 2;
                 for (int i = 0; i < NHIST; i++)
-                    for (int j = 0; j < (1 << (LOGG + LOGASSOC)); j++)
+                    for (int j = 0; j < ((1 << logg[i]) * assoc[i]); j++)
                         gtable[i][j].ubit = gtable[i][j].ubit & X;
             }
 
@@ -572,32 +746,15 @@ public:
 
 
         if (!is_conditional | taken) {
-            phr = (phr << 2);
-            const std::bitset<sizeof(address_t) * CHAR_BIT> b{pc};
-            const std::bitset<sizeof(address_t) * CHAR_BIT> t{nextPC};
+            // Update PHRT
+            phrt <<= 1;
+            constexpr uint64_t TMASK = (1 << (31 - 2 + 1)) - 1;
+            phrt ^= ((nextPC >> 2) & TMASK);
 
-#define PUSH_BIT(bit) { footprint <<= 1; footprint |= bit; }
-            uint16_t footprint = 0;
-            PUSH_BIT(b[18]);
-            PUSH_BIT(b[17]);
-            PUSH_BIT(b[16]);
-            PUSH_BIT(b[15]);
-            PUSH_BIT(b[14]);
-            PUSH_BIT(b[13]);
-            PUSH_BIT(b[10]);
-            PUSH_BIT(b[9]);
-            PUSH_BIT(b[6]);
-            PUSH_BIT(b[5]);
-            PUSH_BIT(b[12] ^ t[5]);
-            PUSH_BIT(b[11] ^ t[4]);
-            PUSH_BIT(b[8] ^ t[3]);
-            PUSH_BIT(b[7] ^ t[2]);
-            PUSH_BIT(b[4] ^ t[1]);
-            PUSH_BIT(b[3] ^ t[0]);
-#undef PUSH_BIT
-
-            phr ^= footprint;
-            phr |= 1;
+            // Update PHRB
+            phrb <<= 1;
+            constexpr uint64_t BMASK = (1 << (5 - 2 + 1)) - 1;
+            phrb ^= ((pc >> 2) & BMASK);
         }
     }
 };

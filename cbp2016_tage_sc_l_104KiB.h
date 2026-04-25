@@ -13,6 +13,11 @@
 #include <vector>
 #include <array>
 #include <iostream>
+#include <memory>
+#include <utility>
+
+#include "perf/base_col_ctr.h"
+#include "perf/col_ctr.h"
 
 
 //parameters of the loop predictor
@@ -272,7 +277,10 @@ class lentry            //loop predictor entry
 
 //For the TAGE predictor
 bentry *btable;         //bimodal TAGE table
+perf::base_col_ctr *b_col_ctr; // Collision counters for btable
 gentry *gtable[NHIST + 1];  // tagged TAGE tables
+perf::collision_ctr *g_col_ctr[NHIST + 1]; // Collision counters for gtable
+std::allocator<perf::collision_ctr> g_col_ctr_alloc;
 //lentry *ltable;
 int m[NHIST + 1];
 int TB[NHIST + 1];
@@ -520,6 +528,30 @@ class CBP2016_TAGE_SC_L
 
         void terminate()
         {
+            std::cout <<
+                    "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
+                    << std::endl;
+            std::cout << "Low history length banks:" << std::endl;
+            g_col_ctr[1]->print_stats(1);
+            std::cout << std::endl;
+            // for (size_t i = 0; i < NBANKLOW; i++) {
+            //     std::cout << "\tBank #" << i + 1 << std::endl;
+            //     g_col_ctr[1][i].print_stats(2);
+            //     std::cout << std::endl;
+            // }
+            std::cout << "High history length banks:" << std::endl;
+            g_col_ctr[BORN]->print_stats(1);
+            std::cout << std::endl;
+            // for (size_t i = 0; i < NBANKHIGH; i++) {
+            //     std::cout << "\tBank #" << i + 1 << std::endl;
+            //     g_col_ctr[BORN][i].print_stats(2);
+            //     std::cout << std::endl;
+            // }
+            std::cout << "Base predictor:" << std::endl;
+            b_col_ctr->print_stats(1);
+            std::cout <<
+                    "---------------------------------------------------------------------------------------------------------------------------------------"
+                    << std::endl;
         }
 
         uint64_t get_unique_inst_id(uint64_t seq_no, uint8_t piece) const
@@ -575,15 +607,30 @@ class CBP2016_TAGE_SC_L
 
             gtable[1] = new gentry[NBANKLOW * (1 << LOGG)];
             SizeTable[1] = NBANKLOW * (1 << LOGG);
+            g_col_ctr[1] = new perf::collision_ctr(1, NBANKLOW * (1 << LOGG));
+            // g_col_ctr[1] = g_col_ctr_alloc.allocate(NBANKLOW);
+            // for (size_t i = 0; i < NBANKLOW; i++) {
+            //     std::construct_at(g_col_ctr[1] + i, 1, 1 << LOGG);
+            // }
 
             gtable[BORN] = new gentry[NBANKHIGH * (1 << LOGG)];
             SizeTable[BORN] = NBANKHIGH * (1 << LOGG);
+            g_col_ctr[BORN] = new perf::collision_ctr(1, NBANKHIGH * (1 << LOGG));
+            // g_col_ctr[BORN] = g_col_ctr_alloc.allocate(NBANKHIGH);
+            // for (size_t i = 0; i < NBANKHIGH; i++) {
+            //     std::construct_at(g_col_ctr[BORN] + i, 1, 1 << LOGG);
+            // }
 
-            for (int i = BORN + 1; i <= NHIST; i++)
+            for (int i = BORN + 1; i <= NHIST; i++) {
                 gtable[i] = gtable[BORN];
-            for (int i = 2; i <= BORN - 1; i++)
+                g_col_ctr[i] = g_col_ctr[BORN];
+            }
+            for (int i = 2; i <= BORN - 1; i++) {
                 gtable[i] = gtable[1];
+                g_col_ctr[i] = g_col_ctr[1];
+            }
             btable = new bentry[1 << LOGB];
+            b_col_ctr = new perf::base_col_ctr(1 << LOGB);
 
             for (int i = 1; i <= NHIST; i++)
             {
@@ -1442,6 +1489,8 @@ class CBP2016_TAGE_SC_L
                             if (abs (2 * gtable[i][GI[i]].ctr + 1) <= 3)
 #endif
                             {
+                                // g_col_ctr[i][GI[i] / (1 << LOGG)].insert(PC, GI[i]);
+                                g_col_ctr[i]->insert(PC, GI[i]);
                                 gtable[i][GI[i]].tag = GTAG[i];
                                 gtable[i][GI[i]].ctr = (resolveDir) ? 0 : -1;
                                 NA++;
@@ -1487,6 +1536,8 @@ class CBP2016_TAGE_SC_L
 #endif
 
                                 {
+                                    // g_col_ctr[i][GI[i] / (1 << LOGG)].insert(PC, GI[i]);
+                                    g_col_ctr[i]->insert(PC, GI[i]);
                                     gtable[i][GI[i]].tag = GTAG[i];
                                     gtable[i][GI[i]].ctr = (resolveDir) ? 0 : -1;
                                     NA++;
@@ -1550,8 +1601,10 @@ class CBP2016_TAGE_SC_L
                             ctrupdate (gtable[AltBank][GI[AltBank]].ctr,
                                     resolveDir, CWIDTH);
                         }
-                        if (AltBank == 0)
+                        if (AltBank == 0) {
                             baseupdate (resolveDir);
+                            b_col_ctr->insert(PC, BI);
+                        }
 
                     }
                 ctrupdate (gtable[HitBank][GI[HitBank]].ctr, resolveDir, CWIDTH);
@@ -1570,8 +1623,10 @@ class CBP2016_TAGE_SC_L
                             }
             }
 
-            else
+            else {
                 baseupdate (resolveDir);
+                b_col_ctr->insert(PC, BI);
+            }
 
             if (LongestMatchPred != alttaken)
                 if (LongestMatchPred == resolveDir)

@@ -20,7 +20,12 @@ stats = [load(f"results/{name}/{workload}_results.csv") for name in names]
 for i in range(len(names)):
     print(f"{names[i]}:")
     data = stats[i]
-    for field in ["MR", "MPKI", "CycWPPKI"]:
+    for field in [
+            "MR",
+            "MPKI",
+            "50PercMR",
+            "50PercMPKI",
+            ]:
         print(f"\t{field}:")
         field_data = np.array(data[field])
         avg = np.mean(field_data)
@@ -40,7 +45,7 @@ for i in range(len(names)):
         print(f"\n{names[j]} vs {names[i]}:")
         data1 = stats[j]
         data2 = stats[i]
-        for field in ["MPKI", "CycWPPKI"]:
+        for field in ["MR", "MPKI"]:
             print(f"\t{field} diff:")
             diff = np.array(data1[field]) - np.array(data2[field])
             diff_abs = np.absolute(diff)
