@@ -15,9 +15,9 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 #include <cassert>
 #include <iostream>
 
-#include "lib/sim_common_structs.h"
-#include "perf/base_col_ctr.h"
-#include "perf/col_ctr.h"
+#include "../lib/sim_common_structs.h"
+#include "../perf/base_col_ctr.h"
+#include "../perf/col_ctr.h"
 
 // This values align roughly with Apple Firestorm
 #define LOGB 13

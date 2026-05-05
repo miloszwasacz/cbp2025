@@ -16,9 +16,9 @@ Code is essentially derived  from the tagged PPM predictor simulator from Pierre
 #include <iostream>
 #include <climits>
 
-#include "lib/sim_common_structs.h"
-#include "perf/base_col_ctr.h"
-#include "perf/col_ctr.h"
+#include "../lib/sim_common_structs.h"
+#include "../perf/base_col_ctr.h"
+#include "../perf/col_ctr.h"
 
 #define LOGB 13
 #define HYSTSHIFT 0
@@ -154,7 +154,7 @@ public:
     bentry *btable;
     gentry *gtable[NHIST];
     size_t logg[NHIST] = {10, 10, 10, 11, 11, 11};
-    size_t assoc[NHIST] = {4, 4, 4, 4, 6, 6};
+    size_t assoc[NHIST] = {4, 4, 4, 4, 4, 6};
 
 
     perf::base_col_ctr *b_col_ctrs[2];
@@ -187,9 +187,9 @@ public:
         }
         STORAGESIZE += (1 << LOGB) + (1 << (LOGB - HYSTSHIFT));
 #ifdef PRINT_SIZE
-        printf("Testing Apple Firestorm CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
+        printf("Testing Qualcomm Oryon CBP (%d bits, %d KiB)\n", STORAGESIZE, STORAGESIZE / (1024 * 8));
 #else
-        printf("Testing Apple Firestorm CBP\n");
+        printf("Testing Qualcomm Oryon CBP\n");
 #endif
     }
 
@@ -236,81 +236,84 @@ public:
         assert(sizeof(int) * CHAR_BIT >= logg[bank]);
         const bitset<sizeof(uint64_t) * CHAR_BIT> pc = PC;
         int fold = 0;
+        // NOTE: These functions are extrapolated from the `firestorm.toml`
+        //       config and values mentioned in the paper, since there is
+        //       no proper config file for Oryon.
         switch (bank) {
             case 0:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrt[53] ^ phrt[58] ^ phrb[0]);
-                PUSH_BIT(phrt[38] ^ phrt[88] ^ pc[9]);
-                PUSH_BIT(phrt[33] ^ phrt[83] ^ phrb[25]);
-                PUSH_BIT(phrt[27] ^ phrt[78] ^ phrb[20]);
-                PUSH_BIT(phrt[22] ^ phrt[73] ^ phrb[15]);
-                PUSH_BIT(phrt[17] ^ phrt[68] ^ phrb[10]);
-                PUSH_BIT(phrt[12] ^ phrt[63] ^ phrb[5]);
-                PUSH_BIT(phrt[7] ^ phrt[48] ^ phrt[99]);
-                PUSH_BIT(phrt[2] ^ phrt[43] ^ phrt[93]);
+                PUSH_BIT(phrt[54] ^ phrt[60] ^ phrb[0]);
+                PUSH_BIT(phrt[39] ^ phrt[90] ^ phrb[30]);
+                PUSH_BIT(phrt[34] ^ phrt[85] ^ phrb[25]);
+                PUSH_BIT(phrt[29] ^ phrt[80] ^ phrb[20]);
+                PUSH_BIT(phrt[24] ^ phrt[75] ^ phrb[15]);
+                PUSH_BIT(phrt[19] ^ phrt[70] ^ phrb[10]);
+                PUSH_BIT(phrt[14] ^ phrt[65] ^ phrb[5]);
+                PUSH_BIT(phrt[8] ^ phrt[49] ^ pc[7]);
+                PUSH_BIT(phrt[3] ^ phrt[44] ^ phrt[95]);
                 break;
             case 1:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrt[32] ^ phrb[6] ^ pc[9]);
-                PUSH_BIT(phrt[25] ^ phrt[28] ^ phrb[3]);
-                PUSH_BIT(phrt[21] ^ phrt[56] ^ phrb[0]);
-                PUSH_BIT(phrt[18] ^ phrt[52] ^ phrb[27]);
-                PUSH_BIT(phrt[14] ^ phrt[49] ^ phrb[23]);
-                PUSH_BIT(phrt[11] ^ phrt[45] ^ phrb[20]);
-                PUSH_BIT(phrt[8] ^ phrt[42] ^ phrb[17]);
-                PUSH_BIT(phrt[4] ^ phrt[38] ^ phrb[13]);
-                PUSH_BIT(phrt[1] ^ phrt[35] ^ phrb[10]);
+                PUSH_BIT(phrt[34] ^ phrb[3] ^ phrb[30]);
+                PUSH_BIT(phrt[24] ^ phrb[31] ^ phrb[0]);
+                PUSH_BIT(phrt[21] ^ phrb[28] ^ phrb[26]);
+                PUSH_BIT(phrt[18] ^ phrb[23] ^ pc[9]);
+                PUSH_BIT(phrt[14] ^ phrt[51] ^ phrb[20]);
+                PUSH_BIT(phrt[11] ^ phrt[48] ^ phrb[16]);
+                PUSH_BIT(phrt[8] ^ phrt[44] ^ phrb[13]);
+                PUSH_BIT(phrt[4] ^ phrt[41] ^ phrb[10]);
+                PUSH_BIT(phrt[1] ^ phrt[38] ^ phrb[6]);
                 break;
             case 2:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrt[23] ^ phrb[17] ^ pc[11]);
-                PUSH_BIT(phrt[21] ^ phrb[14] ^ pc[8]);
-                PUSH_BIT(phrt[18] ^ phrb[12] ^ phrb[27]);
-                PUSH_BIT(phrt[16] ^ phrb[9] ^ phrb[24]);
-                PUSH_BIT(phrt[13] ^ phrb[7] ^ phrb[22]);
-                PUSH_BIT(phrt[8] ^ phrt[11] ^ phrb[4]);
-                PUSH_BIT(phrt[6] ^ phrt[31] ^ phrb[2]);
-                PUSH_BIT(phrt[3] ^ phrt[28] ^ phrb[0]);
-                PUSH_BIT(phrt[1] ^ phrt[26] ^ phrb[19]);
+                PUSH_BIT(phrt[26] ^ phrb[8] ^ phrb[26]);
+                PUSH_BIT(phrt[24] ^ phrb[6] ^ phrb[24]);
+                PUSH_BIT(phrt[21] ^ phrb[4] ^ phrb[22]);
+                PUSH_BIT(phrt[19] ^ phrb[2] ^ phrb[20]);
+                PUSH_BIT(phrt[10] ^ phrt[17] ^ phrb[0]);
+                PUSH_BIT(phrt[8] ^ phrt[15] ^ phrb[17]);
+                PUSH_BIT(phrt[6] ^ phrb[15] ^ phrb[13]);
+                PUSH_BIT(phrt[4] ^ phrb[13] ^ pc[10]);
+                PUSH_BIT(phrt[1] ^ phrb[11] ^ pc[8]);
                 break;
             case 3:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrt[14] ^ phrb[1] ^ pc[11]);
-                PUSH_BIT(phrt[12] ^ phrb[0] ^ pc[9]);
-                PUSH_BIT(phrt[11] ^ phrb[12] ^ pc[8]);
-                PUSH_BIT(phrt[10] ^ phrb[11] ^ phrb[17]);
-                PUSH_BIT(phrt[8] ^ phrb[9] ^ phrb[16]);
-                PUSH_BIT(phrt[7] ^ phrb[8] ^ phrb[15]);
-                PUSH_BIT(phrt[5] ^ phrb[6] ^ phrb[13]);
-                PUSH_BIT(phrt[3] ^ phrt[4] ^ phrb[5]);
-                PUSH_BIT(phrt[1] ^ phrt[17] ^ phrb[4]);
-                PUSH_BIT(phrt[0] ^ phrt[15] ^ phrb[2]);
+                PUSH_BIT(phrb[3] ^ phrb[13] ^ pc[9]);
+                PUSH_BIT(phrb[2] ^ phrb[12] ^ pc[8]);
+                PUSH_BIT(phrb[1] ^ phrb[11] ^ pc[7]);
+                PUSH_BIT(phrt[7] ^ phrt[13] ^ phrb[0]);
+                PUSH_BIT(phrt[6] ^ phrt[12] ^ phrb[10]);
+                PUSH_BIT(phrt[5] ^ phrt[10] ^ phrb[9]);
+                PUSH_BIT(phrt[4] ^ phrt[9] ^ phrb[7]);
+                PUSH_BIT(phrt[3] ^ phrt[8] ^ phrb[6]);
+                PUSH_BIT(phrt[1] ^ phrb[5] ^ pc[11]);
+                PUSH_BIT(phrt[0] ^ phrb[4] ^ pc[10]);
                 break;
             case 4:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrt[10] ^ phrb[4] ^ pc[14]);
-                PUSH_BIT(phrt[9] ^ phrb[3] ^ pc[13]);
-                PUSH_BIT(phrt[8] ^ phrb[2] ^ pc[12]);
-                PUSH_BIT(phrt[7] ^ phrb[1] ^ pc[11]);
-                PUSH_BIT(phrt[6] ^ phrb[0] ^ pc[10]);
-                PUSH_BIT(phrt[5] ^ phrb[9] ^ pc[9]);
-                PUSH_BIT(phrt[4] ^ phrb[8] ^ pc[8]);
-                PUSH_BIT(phrt[3] ^ phrb[7] ^ pc[7]);
-                PUSH_BIT(phrt[2] ^ phrb[6] ^ phrb[10]);
-                PUSH_BIT(phrt[0] ^ phrt[1] ^ phrb[5]);
+                PUSH_BIT(phrb[3] ^ pc[10]);
+                PUSH_BIT(phrb[2] ^ pc[9]);
+                PUSH_BIT(phrb[1] ^ pc[8]);
+                PUSH_BIT(phrb[0] ^ pc[7]);
+                PUSH_BIT(phrt[6] ^ phrb[5]);
+                PUSH_BIT(phrt[5] ^ phrb[4]);
+                PUSH_BIT(phrt[4] ^ pc[13]);
+                PUSH_BIT(phrt[3] ^ pc[12]);
+                PUSH_BIT(phrt[2] ^ pc[11]);
+                PUSH_BIT(phrt[0] ^ phrt[1] ^ phrb[6]);
                 break;
             case 5:
                 PUSH_BIT(pc[6]);
-                PUSH_BIT(phrb[5] ^ pc[12]);
-                PUSH_BIT(phrb[4] ^ pc[11]);
-                PUSH_BIT(phrb[3] ^ pc[10]);
-                PUSH_BIT(phrb[2] ^ pc[9]);
-                PUSH_BIT(phrb[0] ^ phrb[1] ^ pc[7] ^ pc[8]);
-                PUSH_BIT(phrt[5] ^ pc[19]);
-                PUSH_BIT(phrt[4] ^ pc[18]);
+                PUSH_BIT(pc[19]);
+                PUSH_BIT(pc[18]);
+                PUSH_BIT(phrb[3] ^ pc[11]);
+                PUSH_BIT(phrb[2] ^ pc[10]);
+                PUSH_BIT(phrb[1] ^ pc[9]);
+                PUSH_BIT(phrb[0] ^ pc[7] ^ pc[8]);
                 PUSH_BIT(phrt[3] ^ pc[17]);
                 PUSH_BIT(phrt[2] ^ pc[16]);
-                PUSH_BIT(phrt[0] ^ phrt[1] ^ pc[14] ^ pc[15]);
+                PUSH_BIT(phrt[1] ^ pc[15]);
+                PUSH_BIT(phrt[0] ^ pc[13] ^ pc[14]);
                 break;
             default:
                 assert(false);
@@ -329,132 +332,112 @@ public:
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(
-                    pc[18] ^ phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrt[59] ^ phrt[71] ^ phrt[83] ^ phrt[95] ^
-                    phrb[7] ^ phrb[20]);
-                PUSH_BIT(
-                    pc[17] ^ phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrt[58] ^ phrt[70] ^ phrt[82] ^ phrt[94] ^
-                    phrb[6] ^ phrb[19]);
-                PUSH_BIT(
-                    pc[16] ^ phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrt[57] ^ phrt[69] ^ phrt[81] ^ phrt[93] ^ phrb
-                    [5] ^ phrb[18]);
-                PUSH_BIT(
-                    pc[15] ^ phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrt[56] ^ phrt[68] ^ phrt[80] ^ phrt[92] ^ phrb
-                    [4] ^ phrb[17]);
-                PUSH_BIT(
-                    pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrt[55] ^ phrt[67] ^ phrt[79] ^ phrt[91] ^ phrb
-                    [3] ^ phrb[16]);
-                PUSH_BIT(
-                    pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrt[54] ^ phrt[66] ^ phrt[78] ^ phrt[90] ^ phrb
-                    [2] ^ phrb[15]);
-                PUSH_BIT(
-                    pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrt[53] ^ phrt[65] ^ phrt[77] ^ phrt[89] ^ phrb
-                    [1] ^ phrb[14] ^ phrb[27]);
-                PUSH_BIT(
-                    pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrt[52] ^ phrt[64] ^ phrt[76] ^ phrt[88] ^ phrb
-		            [0] ^ phrb[13] ^ phrb[26]);
-                PUSH_BIT(
-                    pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrt[63] ^ phrt[75] ^ phrt[87] ^ phrt
-                    [99] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
-                PUSH_BIT(
-                    pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrt[62] ^ phrt[74] ^ phrt[86] ^ phrt[
-                        98] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
-                PUSH_BIT(
-                    pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrt[61] ^ phrt[73] ^ phrt[85] ^ phrt[
-                        97] ^ phrb[9] ^ phrb[22]);
-                PUSH_BIT(
-                    pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrt[60] ^ phrt[72] ^ phrt[84] ^ phrt[
-                        96] ^ phrb[8] ^ phrb[21]);
+                PUSH_BIT(phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrt[60] ^ phrt[72] ^ phrt[84] ^ phrt[96] ^ phrb[0] ^ phrb[12] ^ phrb[24]);
+                PUSH_BIT(phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrt[59] ^ phrt[71] ^ phrt[83] ^ phrt[95] ^ phrb[11] ^ phrb[23]);
+                PUSH_BIT(phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrt[58] ^ phrt[70] ^ phrt[82] ^ phrt[94] ^ phrb[10] ^ phrb[22]);
+                PUSH_BIT(phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrt[57] ^ phrt[69] ^ phrt[81] ^ phrt[93] ^ phrb[9] ^ phrb[21]);
+                PUSH_BIT(phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrt[56] ^ phrt[68] ^ phrt[80] ^ phrt[92] ^ phrb[8] ^ phrb[20]);
+                PUSH_BIT(phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrt[55] ^ phrt[67] ^ phrt[79] ^ phrt[91] ^ phrb[7] ^ phrb[19] ^ phrb[31]);
+                PUSH_BIT(phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrt[54] ^ phrt[66] ^ phrt[78] ^ phrt[90] ^ phrb[6] ^ phrb[18] ^ phrb[30]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrt[53] ^ phrt[65] ^ phrt[77] ^ phrt[89] ^ phrb[5] ^ phrb[17] ^ phrb[29]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrt[52] ^ phrt[64] ^ phrt[76] ^ phrt[88] ^ phrb[4] ^ phrb[16] ^ phrb[28]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrt[63] ^ phrt[75] ^ phrt[87] ^ phrt[99] ^ phrb[3] ^ phrb[15] ^ phrb[27]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrt[62] ^ phrt[74] ^ phrt[86] ^ phrt[98] ^ phrb[2] ^ phrb[14] ^ phrb[26]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrt[61] ^ phrt[73] ^ phrt[85] ^ phrt[97] ^ phrb[1] ^ phrb[13] ^ phrb[25]);
                 break;
             case 1:
                 PUSH_BIT(pc[2]);
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(pc[18] ^ phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrb[7] ^ phrb[20]);
-                PUSH_BIT(pc[17] ^ phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrb[6] ^ phrb[19]);
-                PUSH_BIT(pc[16] ^ phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrb[5] ^ phrb[18]);
-                PUSH_BIT(pc[15] ^ phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrt[56] ^ phrb[4] ^ phrb[17]);
-                PUSH_BIT(pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrt[55] ^ phrb[3] ^ phrb[16]);
-                PUSH_BIT(pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrt[54] ^ phrb[2] ^ phrb[15]);
-                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrt[53] ^ phrb[1] ^ phrb[14] ^ phrb[27]);
-                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrt[52] ^ phrb[0] ^ phrb[13] ^ phrb[26]);
-                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
-                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
-                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrb[9] ^ phrb[22]);
-                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrb[8] ^ phrb[21]);
+                PUSH_BIT(phrt[0] ^ phrt[12] ^ phrt[24] ^ phrt[36] ^ phrt[48] ^ phrb[0] ^ phrb[12] ^ phrb[24]);
+                PUSH_BIT(phrt[11] ^ phrt[23] ^ phrt[35] ^ phrt[47] ^ phrb[11] ^ phrb[23]);
+                PUSH_BIT(phrt[10] ^ phrt[22] ^ phrt[34] ^ phrt[46] ^ phrb[10] ^ phrb[22]);
+                PUSH_BIT(phrt[9] ^ phrt[21] ^ phrt[33] ^ phrt[45] ^ phrb[9] ^ phrb[21]);
+                PUSH_BIT(phrt[8] ^ phrt[20] ^ phrt[32] ^ phrt[44] ^ phrb[8] ^ phrb[20]);
+                PUSH_BIT(phrt[7] ^ phrt[19] ^ phrt[31] ^ phrt[43] ^ phrb[7] ^ phrb[19] ^ phrb[31]);
+                PUSH_BIT(phrt[6] ^ phrt[18] ^ phrt[30] ^ phrt[42] ^ phrb[6] ^ phrb[18] ^ phrb[30]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrt[41] ^ phrb[5] ^ phrb[17] ^ phrb[29]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrt[40] ^ phrb[4] ^ phrb[16] ^ phrb[28]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrt[39] ^ phrt[51] ^ phrb[3] ^ phrb[15] ^ phrb[27]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrt[38] ^ phrt[50] ^ phrb[2] ^ phrb[14] ^ phrb[26]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrt[37] ^ phrt[49] ^ phrb[1] ^ phrb[13] ^ phrb[25]);
                 break;
             case 2:
                 PUSH_BIT(pc[2]);
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(pc[18] ^ phrt[11] ^ phrt[23] ^ phrb[7] ^ phrb[20]);
-                PUSH_BIT(pc[17] ^ phrt[10] ^ phrt[22] ^ phrb[6] ^ phrb[19]);
-                PUSH_BIT(pc[16] ^ phrt[9] ^ phrt[21] ^ phrb[5] ^ phrb[18]);
-                PUSH_BIT(pc[15] ^ phrt[8] ^ phrt[20] ^ phrb[4] ^ phrb[17]);
-                PUSH_BIT(pc[14] ^ phrt[7] ^ phrt[19] ^ phrt[31] ^ phrb[3] ^ phrb[16]);
-                PUSH_BIT(pc[13] ^ phrt[6] ^ phrt[18] ^ phrt[30] ^ phrb[2] ^ phrb[15]);
-                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrt[29] ^ phrb[1] ^ phrb[14] ^ phrb[27]);
-                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrt[28] ^ phrb[0] ^ phrb[13] ^ phrb[26]);
-                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrt[27] ^ phrb[11] ^ phrb[12] ^ phrb[25]);
-                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrb[10] ^ phrb[23] ^ phrb[24]);
-                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrb[9] ^ phrb[22]);
-                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrt[24] ^ phrb[8] ^ phrb[21]);
+                PUSH_BIT(phrt[0] ^ phrt[12] ^ phrt[24] ^ phrb[0] ^ phrb[12] ^ phrb[24]);
+                PUSH_BIT(phrt[11] ^ phrt[23] ^ phrb[11] ^ phrb[23]);
+                PUSH_BIT(phrt[10] ^ phrt[22] ^ phrb[10] ^ phrb[22]);
+                PUSH_BIT(phrt[9] ^ phrt[21] ^ phrb[9] ^ phrb[21]);
+                PUSH_BIT(phrt[8] ^ phrt[20] ^ phrb[8] ^ phrb[20]);
+                PUSH_BIT(phrt[7] ^ phrt[19] ^ phrb[7] ^ phrb[19]);
+                PUSH_BIT(phrt[6] ^ phrt[18] ^ phrb[6] ^ phrb[18]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrb[5] ^ phrb[17]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrb[4] ^ phrb[16]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrb[3] ^ phrb[15]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrt[26] ^ phrb[2] ^ phrb[14] ^ phrb[26]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrt[25] ^ phrb[1] ^ phrb[13] ^ phrb[25]);
                 break;
             case 3:
                 PUSH_BIT(pc[2]);
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(pc[18] ^ phrt[11] ^ phrb[7]);
-                PUSH_BIT(pc[17] ^ phrt[10] ^ phrb[6]);
-                PUSH_BIT(pc[16] ^ phrt[9] ^ phrb[5]);
-                PUSH_BIT(pc[15] ^ phrt[8] ^ phrb[4] ^ phrb[17]);
-                PUSH_BIT(pc[14] ^ phrt[7] ^ phrb[3] ^ phrb[16]);
-                PUSH_BIT(pc[13] ^ phrt[6] ^ phrb[2] ^ phrb[15]);
-                PUSH_BIT(pc[12] ^ phrt[5] ^ phrt[17] ^ phrb[1] ^ phrb[14]);
-                PUSH_BIT(pc[11] ^ phrt[4] ^ phrt[16] ^ phrb[0] ^ phrb[13]);
-                PUSH_BIT(pc[10] ^ phrt[3] ^ phrt[15] ^ phrb[11] ^ phrb[12]);
-                PUSH_BIT(pc[9] ^ phrt[2] ^ phrt[14] ^ phrb[10]);
-                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrb[9]);
-                PUSH_BIT(pc[7] ^ phrt[0] ^ phrt[12] ^ phrb[8]);
+                PUSH_BIT(phrt[0] ^ phrt[12] ^ phrb[0] ^ phrb[12]);
+                PUSH_BIT(phrt[11] ^ phrb[11]);
+                PUSH_BIT(phrt[10] ^ phrb[10]);
+                PUSH_BIT(phrt[9] ^ phrb[9]);
+                PUSH_BIT(phrt[8] ^ phrb[8]);
+                PUSH_BIT(phrt[7] ^ phrb[7]);
+                PUSH_BIT(phrt[6] ^ phrb[6]);
+                PUSH_BIT(pc[12] ^ phrt[5] ^ phrb[5]);
+                PUSH_BIT(pc[11] ^ phrt[4] ^ phrb[4]);
+                PUSH_BIT(pc[10] ^ phrt[3] ^ phrb[3]);
+                PUSH_BIT(pc[9] ^ phrt[2] ^ phrb[2]);
+                PUSH_BIT(pc[8] ^ phrt[1] ^ phrt[13] ^ phrb[1] ^ phrb[13]);
                 break;
             case 4:
+                // NOTE: These functions are very low confidence, since there is
+                //       no config file and they differ from the previous pattern.
                 PUSH_BIT(pc[2]);
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(pc[18] ^ phrb[7]);
-                PUSH_BIT(pc[17] ^ phrt[10] ^ phrb[6]);
-                PUSH_BIT(pc[16] ^ phrt[9] ^ phrb[5]);
-                PUSH_BIT(pc[15] ^ phrt[8] ^ phrb[4]);
-                PUSH_BIT(pc[14] ^ phrt[7] ^ phrb[3]);
-                PUSH_BIT(pc[13] ^ phrt[6] ^ phrb[2]);
-                PUSH_BIT(pc[12] ^ phrt[5] ^ phrb[1]);
-                PUSH_BIT(pc[11] ^ phrt[4] ^ phrb[0]);
-                PUSH_BIT(pc[10] ^ phrt[3]);
-                PUSH_BIT(pc[9] ^ phrt[2] ^ phrb[10]);
-                PUSH_BIT(pc[8] ^ phrt[1] ^ phrb[9]);
-                PUSH_BIT(pc[7] ^ phrt[0] ^ phrb[8]);
+                PUSH_BIT(phrt[6] ^ phrb[6]);
+                PUSH_BIT(phrt[5] ^ phrb[5]);
+                PUSH_BIT(phrt[4] ^ phrb[4]);
+                PUSH_BIT(phrt[3] ^ phrb[3]);
+                PUSH_BIT(phrt[2] ^ phrb[2]);
+                PUSH_BIT(phrt[1] ^ phrb[1]);
+                PUSH_BIT(phrt[0] ^ phrb[0]);
+                PUSH_BIT(pc[12]);
+                PUSH_BIT(pc[11]);
+                PUSH_BIT(pc[10]);
+                PUSH_BIT(pc[9]);
+                PUSH_BIT(pc[8]);
                 break;
             case 5:
+                // NOTE: These functions are very low confidence, since there is
+                //       no config file and they differ from the previous pattern.
                 PUSH_BIT(pc[2]);
                 PUSH_BIT(pc[3]);
                 PUSH_BIT(pc[4]);
                 PUSH_BIT(pc[5]);
-                PUSH_BIT(pc[18]);
-                PUSH_BIT(pc[17]);
-                PUSH_BIT(pc[16] ^ phrb[5]);
-                PUSH_BIT(pc[15] ^ phrb[4]);
-                PUSH_BIT(pc[14] ^ phrb[3]);
-                PUSH_BIT(pc[13] ^ phrb[2]);
-                PUSH_BIT(pc[12] ^ phrt[5] ^ phrb[1]);
-                PUSH_BIT(pc[11] ^ phrt[4] ^ phrb[0]);
-                PUSH_BIT(pc[10] ^ phrt[3]);
-                PUSH_BIT(pc[9] ^ phrt[2]);
-                PUSH_BIT(pc[8] ^ phrt[1]);
-                PUSH_BIT(pc[7] ^ phrt[0]);
+                PUSH_BIT(phrt[2]);
+                PUSH_BIT(phrt[1]);
+                PUSH_BIT(phrt[0]);
+                PUSH_BIT(phrt[3] ^ phrb[3]);
+                PUSH_BIT(phrb[2]);
+                PUSH_BIT(phrb[1]);
+                PUSH_BIT(phrb[0]);
+                PUSH_BIT(pc[12]);
+                PUSH_BIT(pc[11]);
+                PUSH_BIT(pc[10]);
+                PUSH_BIT(pc[9]);
+                PUSH_BIT(pc[8]);
                 break;
             default:
                 assert(false);

@@ -1,20 +1,20 @@
 #pragma once
 
+#include <bitset>
 #include <iostream>
-#include <concepts>
 #include <vector>
 #include <functional>
 #include <ranges>
 #include <map>
 
-#include "../tage_common.h"
+#include "./tage_common.h"
 #include "../../perf/base_col_ctr.h"
 #include "../../perf/col_ctr.h"
 
-namespace arm::common {
+namespace intel_new::common {
     using idx_t = size_t;
     using tag_t = uint16_t;
-    inline constexpr size_t PHT_COUNT = 6;
+    inline constexpr size_t PHT_COUNT = 3;
 
     class base_pred_t {
     public:
@@ -82,7 +82,7 @@ namespace arm::common {
         static_assert(HYST_WIDTH <= sizeof(uint8_t) * CHAR_BIT);
 
         [[nodiscard]] static size_t index(const uint64_t pc) {
-            return (pc >> 2) & (SIZE - 1);
+            return (pc) & (SIZE - 1);
         }
 
         std::array<bool, SIZE> dir;
@@ -93,73 +93,42 @@ namespace arm::common {
         size_t dir_flips = 0;
     };
 
-    template<size_t PHRT_SIZE, size_t PHRB_SIZE>
+    template<size_t SIZE>
     struct hist_t {
         [[nodiscard]] size_t static size() {
-            return PHRT_SIZE + PHRB_SIZE;
+            return SIZE;
         }
 
         void update(const uint64_t branch, const uint64_t target) {
-            // Update PHRT
-            phrt.shift(1);
-            constexpr uint64_t TMASK = (1 << (31 - 2 + 1)) - 1;
-            phrt.xor_low((target >> 2) & TMASK);
+            phr = (phr << 2);
+            const std::bitset<sizeof(uint64_t) * CHAR_BIT> b{branch};
+            const std::bitset<sizeof(uint64_t) * CHAR_BIT> t{target};
 
-            // Update PHRB
-            phrb.shift(1);
-            constexpr uint64_t BMASK = (1 << (5 - 2 + 1)) - 1;
-            phrb.xor_low((branch >> 2) & BMASK);
+#define PUSH_BIT(bit) { footprint <<= 1; footprint |= bit; }
+            uint16_t footprint = 0;
+            PUSH_BIT(b[18]);
+            PUSH_BIT(b[17]);
+            PUSH_BIT(b[16]);
+            PUSH_BIT(b[15]);
+            PUSH_BIT(b[14]);
+            PUSH_BIT(b[13]);
+            PUSH_BIT(b[10]);
+            PUSH_BIT(b[9]);
+            PUSH_BIT(b[6]);
+            PUSH_BIT(b[5]);
+            PUSH_BIT(b[12] ^ t[5]);
+            PUSH_BIT(b[11] ^ t[4]);
+            PUSH_BIT(b[8] ^ t[3]);
+            PUSH_BIT(b[7] ^ t[2]);
+            PUSH_BIT(b[4] ^ t[1]);
+            PUSH_BIT(b[3] ^ t[0]);
+#undef PUSH_BIT
+
+            phr ^= footprint;
+            phr |= 1;
         }
 
-        template<size_t SIZE>
-        class phr_t {
-        public:
-            template<std::ranges::input_range R>
-                requires std::same_as<std::ranges::range_value_t<R>, size_t>
-            uint8_t fold_bits(R &&indices) const {
-                uint8_t folded = 0;
-                for (auto &&i: indices) {
-                    folded ^= bit_at(i);
-                }
-                return folded;
-            }
-
-            [[nodiscard]] uint8_t bit_at(const size_t idx) const {
-                const uint64_t chunk = reg[idx / CHUNK_SIZE];
-                return (chunk >> (idx % CHUNK_SIZE)) & 0b1;
-            }
-
-            [[nodiscard]] uint64_t low() const {
-                return reg[0];
-            }
-
-            void shift(const uint8_t amount) {
-                const uint64_t mask = (1 << amount) - 1;
-                uint64_t carry = 0;
-                for (auto &chunk: reg) {
-                    chunk = std::rotl(chunk, amount);
-                    const uint64_t new_carry = chunk & mask;
-                    chunk &= ~mask;
-                    chunk |= carry;
-                    carry = new_carry;
-                }
-                reg[reg.size() - 1] &= LAST_CHUNK_MASK;
-            }
-
-            void xor_low(const uint64_t other) {
-                reg[0] ^= other;
-                reg[reg.size() - 1] &= LAST_CHUNK_MASK;
-            }
-
-        private:
-            static constexpr size_t CHUNK_SIZE = sizeof(uint64_t) * CHAR_BIT;
-            static constexpr uint64_t LAST_CHUNK_MASK = (uint64_t{1} << (SIZE % CHUNK_SIZE)) - 1;
-
-            std::array<uint64_t, SIZE / CHUNK_SIZE + 1> reg{};
-        };
-
-        phr_t<PHRT_SIZE> phrt{};
-        phr_t<PHRB_SIZE> phrb{};
+        std::bitset<SIZE> phr = 0;
     };
 
     using pred_t = std::pair<bool, size_t>;
@@ -175,7 +144,7 @@ namespace arm::common {
     class pht_t {
     public:
         using idx_fn_t = std::function<idx_t(uint64_t PC, const Hist &hist)>;
-        using tag_hist_fold_fn_t = std::function<tag_t(const Hist &hist)>;
+        using tag_hist_fold_fn_t = std::function<tag_t(uint64_t PC, const Hist &hist)>;
         using index_range_t = std::ranges::stride_view<std::ranges::iota_view<size_t, size_t> >;
 
         explicit pht_t(const size_t assoc, const size_t log_size, idx_fn_t index, tag_hist_fold_fn_t fold)
@@ -267,8 +236,8 @@ namespace arm::common {
     private:
         struct entry_t {
         private:
-            static constexpr size_t CTR_WIDTH = 2;
-            static constexpr size_t U_WIDTH = 1;
+            static constexpr size_t CTR_WIDTH = 3;
+            static constexpr size_t U_WIDTH = 2;
 
         public:
             static constexpr size_t SIZE = CTR_WIDTH + TAG_WIDTH + U_WIDTH;
@@ -301,14 +270,14 @@ namespace arm::common {
     };
 
     template<typename Hist, typename PHT>
-    class ArmBase {
+    class Base {
         static constexpr size_t BASE_PRED_NUMBER = 0;
 
     protected:
         using phts_t = std::array<PHT, PHT_COUNT>;
 
     public:
-        virtual ~ArmBase() = default;
+        virtual ~Base() = default;
 
         [[nodiscard]] virtual const char *name() const = 0;
 
@@ -429,7 +398,7 @@ namespace arm::common {
     protected:
         using inst_id_t = uint64_t;
 
-        explicit ArmBase(phts_t phts) : phts(std::move(phts)) {
+        explicit Base(phts_t phts) : phts(std::move(phts)) {
         }
 
         virtual void print_stats() const {
@@ -473,3 +442,116 @@ namespace arm::common {
         static constexpr uint64_t u_reset_threshold = tage::common::U_RESET_THRESHOLD;
     };
 }
+
+namespace intel_new {
+    static constexpr size_t PHR_SIZE = 93 * 2;
+    inline constexpr size_t TAG_WIDTH = 13;
+    inline constexpr size_t LOGG = 9;
+    inline constexpr size_t ASSOC = 4;
+
+    class hist_t final : public common::hist_t<PHR_SIZE> {
+    };
+
+    class pht_t final : public common::pht_t<hist_t, TAG_WIDTH> {
+    public:
+        explicit pht_t(const size_t assoc, const size_t log_size, idx_fn_t index, tag_hist_fold_fn_t fold)
+            : common::pht_t<hist_t, TAG_WIDTH>(assoc, log_size, std::move(index), std::move(fold)) {
+        }
+
+        ~pht_t() override = default;
+
+    protected:
+        [[nodiscard]] common::tag_t make_tag(const uint64_t PC, const hist_t &hist) const override {
+            return tag_fold_hist(PC, hist);
+        }
+    };
+}
+
+namespace intel_new {
+    class SkylakeCBP final : public common::Base<hist_t, pht_t> {
+    public:
+        explicit SkylakeCBP() : Base(make_phts()) {
+        }
+
+        [[nodiscard]] const char *name() const override {
+            return "Intel Skylake";
+        }
+
+    private:
+
+        template <typename fold_t>
+        [[nodiscard]] static fold_t fold_history(const hist_t &hist, const int fold_len, const int bank) {
+            assert(fold_len <= sizeof(fold_t) * CHAR_BIT && fold_len > 0);
+            int max_i, min_i, max_j, min_j;
+            switch (bank) {
+                case 0:
+                    max_i = 16 * 11 + 8;
+                    min_i = 16 * 1 - 6;
+                    max_j = 16 * 11 + 1;
+                    min_j = 1;
+                    break;
+                case 1:
+                    max_i = 16 * 3 + 8;
+                    min_i = 16 * 1 - 6;
+                    max_j = 16 * 3 + 1;
+                    min_j = 1;
+                    break;
+                case 2:
+                    max_i = 20;
+                    min_i = 6;
+                    max_j = 15;
+                    min_j = 1;
+                    break;
+                default:
+                    assert(false);
+            }
+
+            fold_t fold = 0;
+
+            int i = max_i;
+            int j = max_j;
+            while (j >= min_j || i >= min_i) {
+                fold_t tmp_fold = 0;
+                for (int b = fold_len - 1; b >= 0; --b) {
+                    tmp_fold <<= 1;
+                    if (i >= min_i) {
+                        tmp_fold ^= hist.phr[i];
+                        i -= 2;
+                    }
+                    if (j >= min_j) {
+                        tmp_fold ^= hist.phr[j];
+                        j -= 2;
+                    }
+                }
+                fold ^= tmp_fold;
+            }
+
+            return fold;
+        }
+
+        template<int bank>
+        static common::idx_t gindex(const uint64_t PC, const hist_t &hist) {
+            const auto fold = fold_history<common::idx_t>(hist, LOGG, bank);
+            const common::idx_t idx = PC ^ fold;
+            return idx & ((1 << LOGG) - 1);
+        }
+
+        template<int bank>
+        static common::tag_t gtag(const uint64_t PC, const hist_t &hist) {
+            const auto fold = fold_history<common::tag_t>(hist, TAG_WIDTH, bank);
+            const common::tag_t tag = PC ^ fold;
+            return tag & ((1 << TAG_WIDTH) - 1);
+        }
+
+        [[nodiscard]] static phts_t make_phts() {
+            phts_t phts = {
+                pht_t(ASSOC /* 4 * (1 << (10 - LOGG)) */, LOGG, gindex<0>, gtag<0>),
+                pht_t(ASSOC /* 4 * (1 << (10 - LOGG)) */, LOGG, gindex<1>, gtag<1>),
+                pht_t(ASSOC /* 6 * (1 << (11 - LOGG)) */, LOGG, gindex<2>, gtag<2>),
+            };
+            std::ranges::reverse(phts);
+            return phts;
+        }
+    };
+}
+

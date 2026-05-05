@@ -1,56 +1,71 @@
 #pragma once
 
+#ifndef CUSTOM
+
+
 #ifdef TAGE2006
-#include "tage2006.h"
+#include "models/tage2006.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef TAGE2006BIG
-#include "tage2006_104KiB.h"
+#include "models/tage2006_104KiB.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
 #ifdef SKYLAKE
-#include "skylake.h"
+#include "models/skylake.h"
 static PREDICTOR cond_predictor_impl;
-#endif
-
-#ifdef SKYLAKECUSTOM
-#include "skylake_firestorm_based.h"
-static intel_new::SkylakeCBP cond_predictor_impl;
-#endif
-
-#ifdef SKYLAKECUSTOMOLD
-#include "impls/intel/skylake.h"
-static intel::SkylakeCBP cond_predictor_impl;
 #endif
 
 #ifdef FIRESTORM
-#include "firestorm.h"
+#include "models/firestorm.h"
 static PREDICTOR cond_predictor_impl;
-#endif
-
-#ifdef FIRESTORMCUSTOM
-#include "impls/firestorm.h"
-static apple::FirestormCBP cond_predictor_impl;
 #endif
 
 #ifdef ORYON
-#include "oryon.h"
+#include "models/oryon.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
-#ifdef ORYONCUSTOM
-#include "impls/oryon.h"
-static qualcomm::OryonCBP cond_predictor_impl;
-#endif
-
 #ifdef TAGE2016
-#include "cbp2016_tage_sc_l_104KiB.h"
+#include "models/cbp2016_tage_sc_l_104KiB.h"
 static CBP2016_TAGE_SC_L cond_predictor_impl;
 #endif
 
 #ifdef TAGE2016COOKBOOK
-#include "cbp2016_tage_sc_cookbook_104KiB.h"
+#include "models/cbp2016_tage_sc_cookbook_104KiB.h"
 static PREDICTOR cond_predictor_impl;
+#endif
+
+
+#else
+
+
+#ifdef TAGE2006
+#include "models/custom/tage2006.h"
+static tage::TAGE2006CBP cond_predictor_impl;
+#endif
+
+#ifdef SKYLAKE
+#include "models/custom/intel/skylake.h"
+static intel::SkylakeCBP cond_predictor_impl;
+#endif
+
+// #ifdef SKYLAKE_FS_BASED
+// #include "models/custom/skylake_firestorm_based.h"
+// static intel_new::SkylakeCBP cond_predictor_impl;
+// #endif
+
+#ifdef FIRESTORM
+#include "models/custom/firestorm.h"
+static apple::FirestormCBP cond_predictor_impl;
+#endif
+
+#ifdef ORYON
+#include "models/custom/oryon.h"
+static qualcomm::OryonCBP cond_predictor_impl;
+#endif
+
+
 #endif

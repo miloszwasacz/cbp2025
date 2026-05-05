@@ -16,8 +16,8 @@
 #include <memory>
 #include <utility>
 
-#include "perf/base_col_ctr.h"
-#include "perf/col_ctr.h"
+#include "../perf/base_col_ctr.h"
+#include "../perf/col_ctr.h"
 
 
 //parameters of the loop predictor

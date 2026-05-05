@@ -7,8 +7,8 @@
 #include <map>
 #include <iostream>
 
-#include "../n_bit_predictor.h"
-#include "../perf/base_col_ctr.h"
+#include "../../n_bit_predictor.h"
+#include "../../perf/base_col_ctr.h"
 
 namespace tage::common {
     inline constexpr size_t BASE_SIZE = 1 << 13; // 2^13

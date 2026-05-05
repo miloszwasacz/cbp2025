@@ -12,13 +12,12 @@
 #include <inttypes.h>
 #include <math.h>
 #include <iostream>
+#include "../lib/sim_common_structs.h"
+// #include "utils.h"
+// #include "bt9.h"
+// #include "bt9_reader.h"
 
-#include "lib/sim_common_structs.h"
-#include "perf/base_col_ctr.h"
-#include "perf/col_ctr.h"
 
-
-// TAGE2016 from the "Cookbook" slides with approximately the same size as Firestorm and Oryon
 
 
 // if one wants to test with "more realistic" initial states
@@ -27,10 +26,9 @@
 
 //
 
-#define LOGSCALE 4
+#define LOGSCALE 3
 #define LOGT  (8+LOGSCALE)	/* logsize of a logical  TAGE tables */
-// #define LOGB (11+LOGSCALE)			// log of number of entries in bimodal predictor
-#define LOGB 13
+#define LOGB (11+LOGSCALE)			// log of number of entries in bimodal predictor
 #define LOGBIAS (7+ LOGSCALE)  // logsize of tables in SC
 
 #if (LOGSCALE==4)
@@ -68,15 +66,15 @@
 
 #define NHIST 14	//14  different history lengths, but 7 physical tables
 
-#define UWIDTH 1
-#define LOGASSOC 0// associative tagged tables are probably  not worth the effort at TBITS=12 : about 0.02 MPKI gain for associativity 2; an extra tag bit would be  needed to get some gain with associativity 4 // but partial skewed associativity (option PSK) might be interesting
-#define TBITS 11 	// if 11 bits: benefit from associativity vanishes
+#define UWIDTH 2
+#define LOGASSOC 1// associative tagged tables are probably  not worth the effort at TBITS=12 : about 0.02 MPKI gain for associativity 2; an extra tag bit would be  needed to get some gain with associativity 4 // but partial skewed associativity (option PSK) might be interesting
+#define TBITS 12 	// if 11 bits: benefit from associativity vanishes
 
 #define LOGG (LOGT-LOGASSOC) // size of way in a logical TAGE table
 #define ASSOC (1<<LOGASSOC)
 
-#define HYSTSHIFT 0
-#define BIMWIDTH 2
+#define HYSTSHIFT 1 // bimodal hysteresis shared among (1<< HYSTSHIFT) entries
+#define BIMWIDTH 3  //  with of the counter in the bimodal predictor
 //A. Seznec: I just played using 3-bit counters in the simulator, using 2-bit counters but HYSTSHIFT=0 brings similar accuracy
 
 
@@ -92,7 +90,7 @@ int BANK1;
 
 /////////////////////////////////////////////////
 // the replacement/allocation policies described in the slide set
-// #define OPTTAGE
+#define OPTTAGE
 #ifdef OPTTAGE
 #ifndef INTERLEAVED
 #define ADJACENTTABLE 1		// ~+0.076,  if 14 tables :7 physical tables: Logical table T(2i-1) and T(2i) are mapped on the the same physical P(i), but the two predictions are adjacent and  are read with index computed with H(2i-1), the tags are respectively computed with  for H(2i-1) and H(2i).
@@ -101,9 +99,7 @@ int BANK1;
 #define OPTGEOHIST // we can do better than geometric series
 // Optimizations  allocation/replacement: globally; ~0.09
 #define FILTERALLOCATION 1	// ~ -0.04 MPKI
-#if UWIDTH > 1
 #define FORCEU 1  //don't work if only one U  bit	// from times selective allocation with u = 1: ~0.015 MPKI
-#endif
 
 #if (LOGASSOC==1)
 // A. Seznec: partial skewed associativity, remmeber that I invented it in 1993 :-)
@@ -122,14 +118,13 @@ int BANK1;
 #define SHARED 0
 #define PSK 0
 #define REPSK 0
-#define OPTGEOHIST
 #endif
 //////////////////////////////////////////////
 
 
 /////////////////////////////////////////////
 /// For the SC component
-// #define SC                    // Enables the statistical corrector
+#define SC                    // Enables the statistical corrector
 #ifndef SC
 #define LMP                   // systematically use LongestMatchPred, but with an optimized allocation policy.
 //In practice the optimizations on TAGE brings significant gains
@@ -164,7 +159,7 @@ uint64_t PrevNumero;
 
 
 //To get the predictor storage budget on stderr  uncomment the next line
-// #define PRINTSIZE
+#define PRINTSIZE
 #include <vector>
 
 
@@ -360,7 +355,7 @@ int8_t COUNT16_31[NHIST+1]; // more or less than 16/31th  misprediction on weak 
 int TAGECONF; // TAGE confidence  from 0 (weak counter) to 3 (saturated)
 
 #define PHISTWIDTH 27		// width of the path history used in TAGE
-#define CWIDTH 2		// predictor counter width on the TAGE tagged tables
+#define CWIDTH 3		// predictor counter width on the TAGE tagged tables
 
 //the counter(s) to chose between longest match and alternate prediction on TAGE when weak counters: only plain TAGE
 #define ALTWIDTH 5
@@ -388,9 +383,8 @@ int BI;				// index of the bimodal table
 bool pred_taken;		// prediction
 
 
-perf::base_col_ctr *b_col_ctrs[2];
-perf::collision_ctr *g_col_ctrs[NHIST + 1];
-size_t dir_flips = 0;
+
+
 
 
 int
@@ -406,13 +400,10 @@ incval (int8_t ctr)
 
 
 int
-predictorsize (bool debug_print = true)
+predictorsize ()
 {
      int STORAGESIZE = 0;
      int inter = 0;
-#ifdef PRINTSIZE
-     debug_print = true;
-#endif
 
 
      STORAGESIZE += NHIST * (1 << LOGG) * (CWIDTH + UWIDTH + TBITS) * ASSOC;
@@ -428,7 +419,7 @@ predictorsize (bool debug_print = true)
      STORAGESIZE += 2 * 7 * (NHIST/4);		//counters COUNT50 COUNT16_31
      STORAGESIZE += 8;		//CountMiss11
      STORAGESIZE += 36;		// for the random number generator
-     if (debug_print) fprintf (stderr, " (TAGE %d) ", STORAGESIZE);
+     fprintf (stderr, " (TAGE %d) ", STORAGESIZE);
 #ifdef SC
 
 
@@ -456,15 +447,13 @@ predictorsize (bool debug_print = true)
 
      STORAGESIZE += inter;
 
-     if (debug_print) fprintf (stderr, " (SC %d) ", inter);
+     fprintf (stderr, " (SC %d) ", inter);
 #endif
 #ifdef PRINTSIZE
 
 
-     if (debug_print) {
-          fprintf (stderr, " (TOTAL %d, %d Kbits)\n  ", STORAGESIZE, STORAGESIZE/1024);
-          fprintf (stdout, " (TOTAL %d %d Kbits)\n  ", STORAGESIZE, STORAGESIZE/1024);
-     }
+     fprintf (stderr, " (TOTAL %d, %d Kbits)\n  ", STORAGESIZE, STORAGESIZE/1024);
+     fprintf (stdout, " (TOTAL %d %d Kbits)\n  ", STORAGESIZE, STORAGESIZE/1024);
 #endif
 
 
@@ -494,38 +483,10 @@ public:
      int mm[NNHIST + 1];
 
      void setup() {
-          std::cout << "Testing TAGE2016 (Cookbook) CBP";
-#ifdef PRINT_SIZE
-          size_t s = predictorsize(false);
-          std::cout << " (" << s << " b, " << s / (1024 * 8) << " KiB)";
-#endif
-          std::cout << std::endl;
+          std::cout << "Testing TAGE2016 (Cookbook) CBP" << std::endl;
      }
 
      void terminate() {
-          std::cout <<
-                    "-----------------------------------------------------------Table Statistics------------------------------------------------------------"
-                    << std::endl;
-          for (int i = NHIST; i > 0; --i) {
-               std::cout << "PHT #" << i << ':' << std::endl;
-               g_col_ctrs[i]->print_stats(1);
-               std::cout << std::endl;
-          }
-          std::cout << "Base predictor:" << std::endl;
-#if HYSTSHIFT == 0
-          b_col_ctrs[0]->print_stats(1);
-          std::cout << "\tDirection flips:\t" << dir_flips << std::endl;
-#else
-          std::cout << "\tDirection table:" << std::endl;
-          b_col_ctrs[0]->print_stats(2);
-          std::cout << "\t\tDirection flips:\t" << dir_flips << std::endl;
-
-          std::cout << "\tHysteresis table:" << std::endl;
-          b_col_ctrs[1]->print_stats(2);
-#endif
-          std::cout <<
-                    "---------------------------------------------------------------------------------------------------------------------------------------"
-                    << std::endl;
      }
 
 
@@ -625,7 +586,7 @@ public:
                     printf ("%d ", m[i]);
                printf ("\n");
 #ifndef INTERLEAVED
-#if SHARED != 0
+               if (SHARED)
                {
                     /* tailored for 14 tables */
                     for (int i = 1; i <= 8; i++)
@@ -633,26 +594,19 @@ public:
                     for (int i = 9; i <= 14; i++)
                          gtable[i] = gtable[i - 8];
                }
-#else
+
+               else
                {
                     for (int i = 1; i <= NHIST; i++)
                          gtable[i] = new gentry[(1 << (LOGG)) * ASSOC];
 
                }
-#endif
 #else
                gtable[1]= new gentry[(1 << (LOGG)) * ASSOC *NHIST];
 
                for (int i = 2; i <= NHIST; i++)
                     gtable[i] = gtable[1];
 
-#endif
-#if !defined(INTERLEAVED) && !(SHARED != 0)
-               for (int i = 0; i <= NHIST; i++) {
-                    g_col_ctrs[i] = new perf::collision_ctr(ASSOC, 1 << LOGG);
-               }
-#else
-               static_assert(false, "TODO: implement collision counters");
 #endif
 
                btable = new bentry[1 << LOGB];
@@ -661,10 +615,6 @@ public:
                     ch_i[i].init (m[i], 25 + (2 * ((i - 1) / 2) % 4), i - 1);
                     ch_t[0][i].init (ch_i[i].OLENGTH, 13, i);
                     ch_t[1][i].init (ch_i[i].OLENGTH, 11, i + 2);
-               }
-
-               for (auto &b_col_ctr : b_col_ctrs) {
-                    b_col_ctr = new perf::base_col_ctr(1 << LOGB);
                }
 
                Seed = 0;
@@ -905,22 +855,13 @@ public:
                return (btable[BI].pred !=0);
           }
 
-     void baseupdate (bool Taken, uint64_t PCBRANCH)
+     void baseupdate (bool Taken)
           {
-               const bool old_pred = btable[BI].pred != 0;
-
                int8_t inter = BIM;
                ctrupdate (inter, Taken, BIMWIDTH);
                btable[BI].pred = (inter >= 0);
                btable[BI >> HYSTSHIFT].hyst = (inter >= 0) ? inter : -inter - 1;
 
-               b_col_ctrs[0]->insert(PCBRANCH, BI);
-#if HYSTSHIFT != 0
-               b_col_ctrs[1]->insert(PCBRANCH, BI);
-#endif
-               if (old_pred != (btable[BI].pred != 0)) {
-                    dir_flips++;
-               }
           };
      uint32_t MYRANDOM ()
           {
@@ -951,7 +892,7 @@ public:
                          AHGI[NPRED % 10][i] = gindex (PC, i, phist, ch_i);
                          AHGTAG[NPRED % 10][i] = gtag (PC, i, ch_t[0], ch_t[1]);
                     }
-#if SHARED != 0
+                    if (SHARED)
                     {
                          int X = AHGI[NPRED % 10][1] & 1;
                          for (int i = 2; i <= 6; i++)
@@ -965,7 +906,6 @@ public:
                               AHGI[NPRED % 10][i] ^= X ^ 1;
                          }
                     }
-#endif
 #ifdef INTERLEAVED
 #ifndef ADJACENTTABLE
                     for (int i = 1; i <= NHIST; i++)
@@ -1566,7 +1506,7 @@ public:
 
 #ifdef FILTERALLOCATION
                          // works because the physical tables are shared
-#if SHARED != 0
+                         if (SHARED)
                               if ((i > 8) & (!Test))
                               {
                                    Test= true;
@@ -1580,7 +1520,6 @@ public:
 
 
                               }
-#endif
 #endif
                          bool done = false;
                          uint j = (MYRANDOM () % ASSOC);
@@ -1631,9 +1570,7 @@ public:
                                                   gtable[i][IREP[j]].tag=   gtable[i][GGI[j][i] + j].tag ;
                                                   gtable[i][IREP[j]].ctr = gtable[i][GGI[j][i] + j].ctr;
 
-                                                  //TODO The entry is moved so the collision counters should also move it
-                                             } else {
-                                                  g_col_ctrs[i]->insert(PCBRANCH, GGI[j][i] + j);
+
                                              }
 
 
@@ -1781,7 +1718,7 @@ public:
                               }
 
                               else
-                                   baseupdate (resolveDir, PCBRANCH);
+                                   baseupdate (resolveDir);
                          }
                     }
 
@@ -1791,7 +1728,7 @@ public:
 
                }
                else
-                    baseupdate (resolveDir, PCBRANCH);
+                    baseupdate (resolveDir);
 ////////: note that here it is alttaken that is used: the second hitting entry
 
                if (LongestMatchPred != alttaken)
