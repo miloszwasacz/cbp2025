@@ -18,13 +18,33 @@ static PREDICTOR cond_predictor_impl;
 static PREDICTOR cond_predictor_impl;
 #endif
 
+#ifdef SKYLAKE_FS_SIZE
+#include "models/skylake_fs_size.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
 #ifdef FIRESTORM
 #include "models/firestorm.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
+#ifdef FIRESTORM_OY_SIZE
+#include "models/firestorm_oy_size.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
+#ifdef FIRESTORM_SL_SIZE
+#include "models/firestorm_sl_size.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
 #ifdef ORYON
 #include "models/oryon.h"
+static PREDICTOR cond_predictor_impl;
+#endif
+
+#ifdef ORYON_FS_SIZE
+#include "models/oryon_fs_size.h"
 static PREDICTOR cond_predictor_impl;
 #endif
 
